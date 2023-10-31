@@ -23,11 +23,11 @@ namespace MediaDeviceCopier
 			}
 			else
 			{
+				Console.WriteLine($"Invalid command: {args[0]}");
+
 				ShowHelpInfo();
 				Environment.Exit(0);
 			}
-
-			Console.WriteLine($"Done");
 		}
 
 		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder)
@@ -73,6 +73,7 @@ namespace MediaDeviceCopier
 					Console.WriteLine(file);
 					device.DownloadFile(file, Path.Combine(targetFolder, Path.GetFileName(file)));
 				}
+				Console.WriteLine($"Done");
 			}
 			if (mode == "upload")
 			{
@@ -87,6 +88,7 @@ namespace MediaDeviceCopier
 					Console.WriteLine(file);
 					device.UploadFile(file, Path.Combine(targetFolder, Path.GetFileName(file)));
 				}
+				Console.WriteLine($"Done");
 			}
 		}
 
