@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34221.43
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaDeviceCopier", "MediaDeviceCopier\MediaDeviceCopier.csproj", "{4FCD9EE1-D340-45D7-9885-94E7E9D31581}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {68D6F9AB-190F-4E33-BC6C-CDF12F72D763}
+	EndGlobalSection
+EndGlobal
