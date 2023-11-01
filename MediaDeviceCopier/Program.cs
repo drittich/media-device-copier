@@ -1,33 +1,74 @@
-﻿using MediaDevices;
+﻿using System.CommandLine;
+
+
+using MediaDevices;
 
 namespace MediaDeviceCopier
 {
 	internal class Program
 	{
-		static void Main(string[] args)
+		static int Main(string[] args)
 		{
-			if (args.Length == 0)
-			{
-				ShowHelpInfo();
-				Environment.Exit(0);
-			}
+			// create options
+			var deviceNameOption = new Option<string>(
+				new[] { "--device-name", "-n" },
 
-			if (args[0] == "listdevices")
+				description: "The MTP device we'll be copying files to/from.")
 			{
-				ListDevices();
-			}
+				IsRequired = true
+			};
 
-			else if (args[0] == "upload" || args[0] == "download")
+			var sourceFolderOption = new Option<string>(
+				new[] { "--source-folder", "-s" },
+				description: "The folder we'll be copying files from.")
 			{
-				CopyFiles(args[0], args[1], args[2], args[3]);
-			}
-			else
-			{
-				Console.WriteLine($"Invalid command: {args[0]}");
+				IsRequired = true
+			};
 
-				ShowHelpInfo();
-				Environment.Exit(0);
-			}
+			var targetFolderOption = new Option<string>(
+				new[] { "--target-folder", "-t" },
+				description: "The folder we'll be copying files to.")
+			{
+				IsRequired = true
+			};
+
+			// create commands
+			var rootCommand = new RootCommand("MediaDeviceCopier");
+
+			var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
+			listDevicesCommand.AddAlias("l");
+			rootCommand.AddCommand(listDevicesCommand);
+
+			var uploadCommand = new Command("upload-files", "Upload files to the MTP device.");
+			uploadCommand.AddAlias("u");
+			uploadCommand.AddOption(deviceNameOption);
+			uploadCommand.AddOption(sourceFolderOption);
+			uploadCommand.AddOption(targetFolderOption);
+			rootCommand.AddCommand(uploadCommand);
+
+			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
+			downloadCommand.AddAlias("d");
+			downloadCommand.AddOption(deviceNameOption);
+			downloadCommand.AddOption(sourceFolderOption);
+			downloadCommand.AddOption(targetFolderOption);
+			rootCommand.AddCommand(downloadCommand);
+
+			// set handlers
+			listDevicesCommand.SetHandler(ListDevices);
+
+			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder) =>
+				{
+					CopyFiles("upload", deviceName!, sourceFolder, targetFolder);
+				},
+				deviceNameOption, sourceFolderOption, targetFolderOption);
+
+			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder) =>
+				{
+					CopyFiles("download", deviceName!, sourceFolder, targetFolder);
+				},
+				deviceNameOption, sourceFolderOption, targetFolderOption);
+
+			return rootCommand.InvokeAsync(args).Result;
 		}
 
 		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder)
@@ -90,15 +131,6 @@ namespace MediaDeviceCopier
 				}
 				Console.WriteLine($"Done");
 			}
-		}
-
-		private static void ShowHelpInfo()
-		{
-			Console.WriteLine("MediaDeviceCopier v0.1");
-			Console.WriteLine("Commands:");
-			Console.WriteLine("   listdevices");
-			Console.WriteLine("   download [device name] [source folder] [destination]");
-			Console.WriteLine("   upload [device name] [source folder] [destination]");
 		}
 
 		private static void ListDevices()
