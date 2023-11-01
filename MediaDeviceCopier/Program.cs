@@ -1,18 +1,21 @@
 ﻿using System.CommandLine;
 
-
-using MediaDevices;
-
 namespace MediaDeviceCopier
 {
 	internal class Program
 	{
 		static int Main(string[] args)
 		{
+			var rootCommand = SetupCommandHandler();
+
+			return rootCommand.InvokeAsync(args).Result;
+		}
+
+		private static RootCommand SetupCommandHandler()
+		{
 			// create options
 			var deviceNameOption = new Option<string>(
 				new[] { "--device-name", "-n" },
-
 				description: "The MTP device we'll be copying files to/from.")
 			{
 				IsRequired = true
@@ -32,6 +35,10 @@ namespace MediaDeviceCopier
 				IsRequired = true
 			};
 
+			var skipExistingFilesOption = new Option<bool?>(
+				new[] { "--skip-existing", "-se" },
+				description: "Whether to skip existing files (default: true).");
+
 			// create commands
 			var rootCommand = new RootCommand("MediaDeviceCopier");
 
@@ -44,6 +51,7 @@ namespace MediaDeviceCopier
 			uploadCommand.AddOption(deviceNameOption);
 			uploadCommand.AddOption(sourceFolderOption);
 			uploadCommand.AddOption(targetFolderOption);
+			uploadCommand.AddOption(skipExistingFilesOption);
 			rootCommand.AddCommand(uploadCommand);
 
 			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
@@ -51,36 +59,105 @@ namespace MediaDeviceCopier
 			downloadCommand.AddOption(deviceNameOption);
 			downloadCommand.AddOption(sourceFolderOption);
 			downloadCommand.AddOption(targetFolderOption);
+			downloadCommand.AddOption(skipExistingFilesOption);
 			rootCommand.AddCommand(downloadCommand);
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
 
-			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder) =>
-				{
-					CopyFiles("upload", deviceName!, sourceFolder, targetFolder);
-				},
-				deviceNameOption, sourceFolderOption, targetFolderOption);
+			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting) =>
+			{
+				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting);
+			},
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption);
 
-			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder) =>
-				{
-					CopyFiles("download", deviceName!, sourceFolder, targetFolder);
-				},
-				deviceNameOption, sourceFolderOption, targetFolderOption);
-
-			return rootCommand.InvokeAsync(args).Result;
+			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting) =>
+			{
+				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting);
+			},
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption);
+			return rootCommand;
 		}
 
-		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder)
+		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting)
 		{
-			var devices = MediaDevice.GetDevices().OrderBy(d => d.FriendlyName).ToList();
-			var device = devices.FirstOrDefault(d => d.FriendlyName.Equals(deviceName, StringComparison.InvariantCultureIgnoreCase));
+			var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
+
+			var device = GetDeviceByName(deviceName);
+
+			if (mode == "download")
+			{
+				if (!Directory.Exists(targetFolder))
+				{
+					Console.WriteLine($"Target folder does not exist: {targetFolder}");
+					Environment.Exit(1);
+				}
+
+				var files = device.GetFiles(sourceFolder);
+				var count = files.Length;
+				Console.WriteLine($"Copying {count:N0} files...");
+
+				foreach (var file in files.OrderBy(d => d))
+				{
+					var targetFile = Path.Combine(targetFolder, Path.GetFileName(file));
+					Console.Write($"{file}...");
+
+					var copyResult = device.CopyFile(fileCopyMode, file, targetFile, skipExisting ??= true);
+					if (copyResult == FileCopyStatus.Copied)
+					{
+						Console.WriteLine();
+					}
+					else if (copyResult == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
+					{
+						Console.WriteLine($"overwriting because date or size mismatch");
+					}
+					else if (copyResult == FileCopyStatus.SkippedBecauseAlreadyExists)
+					{
+						Console.WriteLine($"skipped becuse already exists");
+					}
+				}
+				Console.WriteLine($"Done");
+			}
+			if (mode == "upload")
+			{
+				// TODO: check whether target folder exists
+
+				var files = Directory.GetFiles(sourceFolder);
+				var count = files.Length;
+				Console.WriteLine($"Copying {count:N0} files...");
+
+				foreach (var file in files.OrderBy(d => d))
+				{
+					var targetFile = Path.Combine(targetFolder, Path.GetFileName(file));
+					Console.Write($"{file}...");
+
+					var copyResult = device.CopyFile(fileCopyMode, file, targetFile, skipExisting ??= true);
+					if (copyResult == FileCopyStatus.Copied)
+					{
+						Console.WriteLine();
+					}
+					else if (copyResult == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
+					{
+						Console.WriteLine($"overwriting because date or size mismatch");
+					}
+					else if (copyResult == FileCopyStatus.SkippedBecauseAlreadyExists)
+					{
+						Console.WriteLine($"skipped becuse already exists");
+					}
+				}
+				Console.WriteLine($"Done");
+			}
+		}
+
+		private static MtpDevice GetDeviceByName(string deviceName)
+		{
+			var device = MtpDevice.GetByName(deviceName);
 
 			if (device is null)
 			{
 				Console.WriteLine($"Device not found: {deviceName}");
 				Console.WriteLine($"Available devices are:");
-				foreach (var d in devices)
+				foreach (var d in MtpDevice.GetAll())
 				{
 					Console.WriteLine($"   {d.FriendlyName}");
 				}
@@ -97,45 +174,12 @@ namespace MediaDeviceCopier
 				Environment.Exit(1);
 			}
 
-			if (mode == "download")
-			{
-				if (!Directory.Exists(targetFolder))
-				{
-					Console.WriteLine($"Target folder does not exist: {targetFolder}");
-					Environment.Exit(1);
-				}
-
-				var files = device.GetFiles(sourceFolder);
-				var count = files.Length;
-				Console.WriteLine($"Copying {count:N0} files...");
-
-				foreach (var file in files.OrderBy(d => d))
-				{
-					Console.WriteLine(file);
-					device.DownloadFile(file, Path.Combine(targetFolder, Path.GetFileName(file)));
-				}
-				Console.WriteLine($"Done");
-			}
-			if (mode == "upload")
-			{
-				// TODO: check whether target folder exists
-
-				var files = Directory.GetFiles(sourceFolder);
-				var count = files.Length;
-				Console.WriteLine($"Copying {count:N0} files...");
-
-				foreach (var file in files.OrderBy(d => d))
-				{
-					Console.WriteLine(file);
-					device.UploadFile(file, Path.Combine(targetFolder, Path.GetFileName(file)));
-				}
-				Console.WriteLine($"Done");
-			}
+			return device;
 		}
 
 		private static void ListDevices()
 		{
-			var devices = MediaDevice.GetDevices().ToList();
+			var devices = MtpDevice.GetAll();
 
 			foreach (var device in devices)
 			{
