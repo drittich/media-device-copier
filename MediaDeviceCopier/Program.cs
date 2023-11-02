@@ -115,20 +115,7 @@ namespace MediaDeviceCopier
 				WriteCopyResult(fileCopyResultInfo);
 			}
 			Console.WriteLine($"Done, copied {BytesToString(bytesCopied)}, skipped {BytesToString(bytesNotCopied)}");
-			Console.Write($"Elapsed time: ");
-			if (sw.Elapsed.TotalHours > 0)
-			{
-				Console.Write($"{sw.Elapsed.TotalHours.ToString("00")}:");
-			}
-			if (sw.Elapsed.TotalMinutes > 0)
-			{
-				Console.Write($"{sw.Elapsed.TotalMinutes.ToString("00")}:");
-			}
-			if (sw.Elapsed.TotalSeconds > 0)
-			{
-				Console.Write($"{sw.Elapsed.TotalSeconds.ToString("00.00")}:");
-			}
-			Console.WriteLine();
+			Console.WriteLine($"Elapsed time: {sw.Elapsed.ToString(@"hh\:mm\:ss\.ff")}");
 		}
 
 		private static void ValidateFolders(FileCopyMode fileCopyMode, MtpDevice device, string sourceFolder, string targetFolder)
