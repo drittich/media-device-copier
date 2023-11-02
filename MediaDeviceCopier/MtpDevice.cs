@@ -2,9 +2,10 @@
 
 namespace MediaDeviceCopier
 {
-	public class MtpDevice
+	public class MtpDevice : IDisposable
 	{
-		private MediaDevice _device;
+		private bool _disposed;
+		private readonly MediaDevice _device;
 		public MtpDevice(MediaDevice device)
 		{
 			_device = device;
@@ -23,13 +24,9 @@ namespace MediaDeviceCopier
 		private static List<MediaDevice>? _listDevices;
 		public static List<MediaDevice> GetAll()
 		{
-			if (_listDevices is null)
-			{
-
-				_listDevices = MediaDevice.GetDevices()
+			_listDevices ??= MediaDevice.GetDevices()
 					.OrderBy(d => d.FriendlyName)
 					.ToList();
-			}
 
 			return _listDevices;
 		}
@@ -57,7 +54,7 @@ namespace MediaDeviceCopier
 			return _device.GetFileInfo(filePath);
 		}
 
-		public FileCopyStatus CopyFile(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath, bool skipExisting)
+		public FileCopyResultInfo CopyFile(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath, bool skipExisting)
 		{
 			if (!_device.IsConnected)
 			{
@@ -78,76 +75,106 @@ namespace MediaDeviceCopier
 			}
 		}
 
-		private FileCopyStatus UploadFile(string sourceFilePath, string targetFilePath, bool skipExisting)
+		private FileCopyResultInfo DownloadFile(string sourceFilePath, string targetFilePath, bool skipExisting)
 		{
 			FileCopyStatus fileCopyStatus = FileCopyStatus.Copied;
-
-			if (skipExisting && _device.FileExists(targetFilePath))
-			{
-				// TODO: check that file size and dates match and skip if they do
-				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Upload, sourceFilePath, targetFilePath);
-				if (sizeAndDatesMatch)
-				{
-					Console.WriteLine($"Skipping existing file: {targetFilePath}");
-					return FileCopyStatus.SkippedBecauseAlreadyExists;
-				}
-				else
-				{
-					fileCopyStatus = FileCopyStatus.CopiedBecauseDateOrSizeMismatch;
-					Console.WriteLine($"Overwriting existing file, date or size mismatch: {targetFilePath}");
-				}
-			}
-
-			_device.UploadFile(sourceFilePath, targetFilePath);
-			return fileCopyStatus;
-		}
-
-		private FileCopyStatus DownloadFile(string sourceFilePath, string targetFilePath, bool skipExisting)
-		{
-			FileCopyStatus fileCopyStatus = FileCopyStatus.Copied;
+			FileComparisonInfo? mtpFileComparisonInfo = null;
+			FileCopyResultInfo fileCopyInfo;
 
 			if (skipExisting && File.Exists(targetFilePath))
 			{
-				// TODO: check that file size and dates match and skip if they do
-				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Download, sourceFilePath, targetFilePath);
+				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Download, sourceFilePath, targetFilePath, out mtpFileComparisonInfo);
 				if (sizeAndDatesMatch)
 				{
-					Console.WriteLine($"Skipping existing file: {targetFilePath}");
-					return FileCopyStatus.SkippedBecauseAlreadyExists;
+					fileCopyInfo = new()
+					{
+						CopyStatus = FileCopyStatus.SkippedBecauseAlreadyExists,
+						Length = mtpFileComparisonInfo.Length
+					};
+					return fileCopyInfo;
 				}
 				else
 				{
 					fileCopyStatus = FileCopyStatus.CopiedBecauseDateOrSizeMismatch;
-					Console.WriteLine($"Overwriting existing file, date or size mismatch: {targetFilePath}");
 				}
 			}
 
 			_device.DownloadFile(sourceFilePath, targetFilePath);
-			return fileCopyStatus;
+
+			// set the file date to match the source file
+			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+			File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+
+			fileCopyInfo = new()
+			{
+				CopyStatus = fileCopyStatus,
+				Length = mtpFileComparisonInfo.Length
+			};
+			return fileCopyInfo;
 		}
 
-		private bool GetSizeAndDatesMatch(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath)
+		private FileCopyResultInfo UploadFile(string sourceFilePath, string targetFilePath, bool skipExisting)
 		{
+			FileCopyStatus fileCopyStatus = FileCopyStatus.Copied;
+			FileComparisonInfo? mtpFileComparisonInfo = null;
+			FileCopyResultInfo fileCopyInfo;
+
+			if (skipExisting && _device.FileExists(targetFilePath))
+			{
+				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Upload, sourceFilePath, targetFilePath, out mtpFileComparisonInfo);
+				if (sizeAndDatesMatch)
+				{
+					fileCopyInfo = new()
+					{
+						CopyStatus = FileCopyStatus.SkippedBecauseAlreadyExists,
+						Length = mtpFileComparisonInfo.Length
+					};
+					return fileCopyInfo;
+				}
+				else
+				{
+					fileCopyStatus = FileCopyStatus.CopiedBecauseDateOrSizeMismatch;
+				}
+			}
+
+			_device.UploadFile(sourceFilePath, targetFilePath);
+
+			// TODO: figure out how to set the file date to match the source file
+			// set the file date to match the source file
+			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+			//File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+
+			fileCopyInfo = new()
+			{
+				CopyStatus = fileCopyStatus,
+				Length = mtpFileComparisonInfo.Length
+			};
+			return fileCopyInfo;
+		}
+
+		private bool GetSizeAndDatesMatch(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath, out FileComparisonInfo mtpFileComparisonInfo)
+		{
+			FileComparisonInfo sourceComparisonInfo;
+			FileComparisonInfo targetComparisonInfo;
+
 			if (fileCopyMode is FileCopyMode.Download)
 			{
-				var sourceFileInfo = _device.GetFileInfo(sourceFilePath);
-				var targetFileInfo = new FileInfo(targetFilePath);
-
-				return sourceFileInfo.Length == (ulong)targetFileInfo.Length
-					&& sourceFileInfo.LastWriteTime == targetFileInfo.LastWriteTimeUtc;
+				sourceComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+				mtpFileComparisonInfo = sourceComparisonInfo;
+				targetComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
 			}
 			else if (fileCopyMode is FileCopyMode.Upload)
 			{
-				var sourceFileInfo = new FileInfo(sourceFilePath);
-				var targetFileInfo = _device.GetFileInfo(targetFilePath);
-
-				return (ulong)sourceFileInfo.Length == targetFileInfo.Length
-					&& sourceFileInfo.LastWriteTimeUtc == targetFileInfo.LastWriteTime;
+				sourceComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
+				targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+				mtpFileComparisonInfo = targetComparisonInfo;
 			}
 			else
 			{
 				throw new NotImplementedException();
 			}
+
+			return sourceComparisonInfo.Equals(targetComparisonInfo);
 		}
 
 		public string[] GetFiles(string folder)
@@ -158,6 +185,43 @@ namespace MediaDeviceCopier
 			}
 
 			return _device.GetFiles(folder);
+		}
+
+		public static FileComparisonInfo GetComparisonInfo(MediaFileInfo mediaFileInfo)
+		{
+			return new()
+			{
+				Length = mediaFileInfo.Length,
+				ModifiedDate = mediaFileInfo.LastWriteTime!.Value
+			};
+		}
+
+		public static FileComparisonInfo GetComparisonInfo(FileInfo fileInfo)
+		{
+			return new()
+			{
+				Length = (ulong)fileInfo.Length,
+				ModifiedDate = fileInfo.LastWriteTime
+			};
+		}
+
+		public bool DirectoryExists(string folder)
+		{
+			return _device.DirectoryExists(folder);
+		}
+
+		public string FriendlyName => _device.FriendlyName;
+
+		void IDisposable.Dispose()
+		{
+			if (_disposed)
+				return;
+
+			_disposed = true;
+
+			// Call the base class implementation.
+			_device.Dispose();
+			GC.SuppressFinalize(this);
 		}
 	}
 }

@@ -1,14 +1,14 @@
 ﻿using System.CommandLine;
+using System.Diagnostics;
 
 namespace MediaDeviceCopier
 {
 	internal class Program
 	{
-		static int Main(string[] args)
+		static async Task<int> Main(string[] args)
 		{
 			var rootCommand = SetupCommandHandler();
-
-			return rootCommand.InvokeAsync(args).Result;
+			return await rootCommand.InvokeAsync(args);
 		}
 
 		private static RootCommand SetupCommandHandler()
@@ -81,71 +81,86 @@ namespace MediaDeviceCopier
 
 		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting)
 		{
+			var sw = Stopwatch.StartNew();
 			var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
 
-			var device = GetDeviceByName(deviceName);
+			using var device = GetDeviceByName(deviceName);
+			string[] files = fileCopyMode is FileCopyMode.Download ? device.GetFiles(sourceFolder) : Directory.GetFiles(sourceFolder);
 
-			if (mode == "download")
+			ValidateFolders(fileCopyMode, device, sourceFolder, targetFolder);
+
+			var count = files.Length;
+			ulong bytesCopied = 0;
+			ulong bytesNotCopied = 0;
+			Console.WriteLine($"Copying {count:N0} files...");
+
+			foreach (var sourceFilePath in files.OrderBy(d => d))
 			{
-				if (!Directory.Exists(targetFolder))
+				var targetFilePath = Path.Combine(targetFolder, Path.GetFileName(sourceFilePath));
+				Console.Write($"{sourceFilePath}...copying");
+
+				var fileCopyResultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ??= true);
+				if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
 				{
-					Console.WriteLine($"Target folder does not exist: {targetFolder}");
-					Environment.Exit(1);
+					bytesNotCopied += fileCopyResultInfo.Length;
+				}
+				else
+				{
+					bytesCopied += fileCopyResultInfo.Length;
 				}
 
-				var files = device.GetFiles(sourceFolder);
-				var count = files.Length;
-				Console.WriteLine($"Copying {count:N0} files...");
+				// erase the word "copying" 
+				Console.CursorLeft -= 7;
 
-				foreach (var file in files.OrderBy(d => d))
-				{
-					var targetFile = Path.Combine(targetFolder, Path.GetFileName(file));
-					Console.Write($"{file}...");
-
-					var copyResult = device.CopyFile(fileCopyMode, file, targetFile, skipExisting ??= true);
-					if (copyResult == FileCopyStatus.Copied)
-					{
-						Console.WriteLine();
-					}
-					else if (copyResult == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
-					{
-						Console.WriteLine($"overwriting because date or size mismatch");
-					}
-					else if (copyResult == FileCopyStatus.SkippedBecauseAlreadyExists)
-					{
-						Console.WriteLine($"skipped becuse already exists");
-					}
-				}
-				Console.WriteLine($"Done");
+				WriteCopyResult(fileCopyResultInfo);
 			}
-			if (mode == "upload")
+			Console.WriteLine($"Done, copied {BytesToString(bytesCopied)}, skipped {BytesToString(bytesNotCopied)}");
+			Console.Write($"Elapsed time: ");
+			if (sw.Elapsed.TotalHours > 0)
 			{
-				// TODO: check whether target folder exists
+				Console.Write($"{sw.Elapsed.TotalHours.ToString("00")}:");
+			}
+			if (sw.Elapsed.TotalMinutes > 0)
+			{
+				Console.Write($"{sw.Elapsed.TotalMinutes.ToString("00")}:");
+			}
+			if (sw.Elapsed.TotalSeconds > 0)
+			{
+				Console.Write($"{sw.Elapsed.TotalSeconds.ToString("00.00")}:");
+			}
+			Console.WriteLine();
+		}
 
-				var files = Directory.GetFiles(sourceFolder);
-				var count = files.Length;
-				Console.WriteLine($"Copying {count:N0} files...");
+		private static void ValidateFolders(FileCopyMode fileCopyMode, MtpDevice device, string sourceFolder, string targetFolder)
+		{
+			string mtpFolder = fileCopyMode is FileCopyMode.Download ? sourceFolder : targetFolder;
+			string windowsFolder = fileCopyMode is FileCopyMode.Download ? targetFolder : sourceFolder;
 
-				foreach (var file in files.OrderBy(d => d))
-				{
-					var targetFile = Path.Combine(targetFolder, Path.GetFileName(file));
-					Console.Write($"{file}...");
+			if (!device.DirectoryExists(mtpFolder))
+			{
+				Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}");
+				Environment.Exit(1);
+			}
+			if (!Directory.Exists(windowsFolder))
+			{
+				Console.WriteLine($"Windows folder does not exist: {windowsFolder}");
+				Environment.Exit(1);
+			}
+		}
 
-					var copyResult = device.CopyFile(fileCopyMode, file, targetFile, skipExisting ??= true);
-					if (copyResult == FileCopyStatus.Copied)
-					{
-						Console.WriteLine();
-					}
-					else if (copyResult == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
-					{
-						Console.WriteLine($"overwriting because date or size mismatch");
-					}
-					else if (copyResult == FileCopyStatus.SkippedBecauseAlreadyExists)
-					{
-						Console.WriteLine($"skipped becuse already exists");
-					}
-				}
-				Console.WriteLine($"Done");
+		private static void WriteCopyResult(FileCopyResultInfo fileCopyResultInfo)
+		{
+			if (fileCopyResultInfo.CopyStatus == FileCopyStatus.Copied)
+			{
+				Console.WriteLine("copied  ");
+			}
+			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
+			{
+				Console.WriteLine($"copied (date or size mismatch)");
+			}
+			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
+			{
+				Console.WriteLine($"skipped (already exists)");
 			}
 		}
 
@@ -185,6 +200,18 @@ namespace MediaDeviceCopier
 			{
 				Console.WriteLine($"Device: {device.FriendlyName}");
 			}
+		}
+
+		static string BytesToString(ulong byteCount)
+		{
+			var longByteCount = (long)byteCount;
+			string[] suf = { "B", "KB", "MB", "GB", "TB", "PB", "EB" }; //Longs run out around EB
+			if (longByteCount == 0)
+				return "0" + suf[0];
+			long bytes = Math.Abs(longByteCount);
+			int place = Convert.ToInt32(Math.Floor(Math.Log(bytes, 1024)));
+			double num = Math.Round(bytes / Math.Pow(1024, place), 1);
+			return (Math.Sign(longByteCount) * num).ToString() + suf[place];
 		}
 	}
 }
