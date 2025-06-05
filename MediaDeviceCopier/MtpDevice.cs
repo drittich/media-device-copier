@@ -21,38 +21,38 @@ namespace MediaDeviceCopier
 			_device.Connect();
 		}
 
-                private static List<MtpDevice>? _listDevices;
-                private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () =>
-                        MediaDevices.MediaDevice.GetDevices()
-                                .Select(d => (IMediaDevice)new MediaDeviceWrapper(d));
+		private static List<MtpDevice>? _listDevices;
+		private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () =>
+				MediaDevices.MediaDevice.GetDevices()
+						.Select(d => (IMediaDevice)new MediaDeviceWrapper(d));
 
-                public static Func<IEnumerable<IMediaDevice>> DeviceFactory
-                {
-                        get => _deviceFactory;
-                        set
-                        {
-                                _deviceFactory = value;
-                                _listDevices = null;
-                        }
-                }
+		public static Func<IEnumerable<IMediaDevice>> DeviceFactory
+		{
+			get => _deviceFactory;
+			set
+			{
+				_deviceFactory = value;
+				_listDevices = null;
+			}
+		}
 
-                public static List<MtpDevice> GetAll()
-                {
-                        _listDevices ??= DeviceFactory()
-                                .OrderBy(d => d.FriendlyName)
-                                .Select(d => new MtpDevice(d))
-                                .ToList();
+		public static List<MtpDevice> GetAll()
+		{
+			_listDevices ??= DeviceFactory()
+					.OrderBy(d => d.FriendlyName)
+					.Select(d => new MtpDevice(d))
+					.ToList();
 
-                        return _listDevices;
-                }
+			return _listDevices;
+		}
 
-                public static MtpDevice? GetByName(string deviceName)
-                {
-                        var device = GetAll()
-                                .FirstOrDefault(d => d.FriendlyName.Equals(deviceName, StringComparison.InvariantCultureIgnoreCase));
+		public static MtpDevice? GetByName(string deviceName)
+		{
+			var device = GetAll()
+					.FirstOrDefault(d => d.FriendlyName.Equals(deviceName, StringComparison.InvariantCultureIgnoreCase));
 
-                        return device;
-                }
+			return device;
+		}
 
 		public MediaFileInfo GetFileInfo(string filePath)
 		{
@@ -149,9 +149,9 @@ namespace MediaDeviceCopier
 
 			_device.UploadFile(sourceFilePath, targetFilePath);
 
-                        // TODO: figure out how to set the file date to match the source file
-                        // set the file date to match the source file
-                        mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(targetFilePath));
+			// TODO: figure out how to set the file date to match the source file
+			// set the file date to match the source file
+			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(targetFilePath));
 			//File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
 
 			fileCopyInfo = new()
@@ -173,23 +173,23 @@ namespace MediaDeviceCopier
 				mtpFileComparisonInfo = sourceComparisonInfo;
 				targetComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
 			}
-                        else if (fileCopyMode is FileCopyMode.Upload)
-                        {
-                                sourceComparisonInfo = GetComparisonInfo(new FileInfo(sourceFilePath));
-                                targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(targetFilePath));
-                                mtpFileComparisonInfo = targetComparisonInfo;
+			else if (fileCopyMode is FileCopyMode.Upload)
+			{
+				sourceComparisonInfo = GetComparisonInfo(new FileInfo(sourceFilePath));
+				targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(targetFilePath));
+				mtpFileComparisonInfo = targetComparisonInfo;
 			}
 			else
 			{
 				throw new NotImplementedException();
 			}
 
-                        if (fileCopyMode is FileCopyMode.Upload)
-                        {
-                                // Modified dates are unreliable when uploading to MTP devices
-                                return sourceComparisonInfo.Length == targetComparisonInfo.Length;
-                        }
-                        return sourceComparisonInfo.Equals(targetComparisonInfo);
+			if (fileCopyMode is FileCopyMode.Upload)
+			{
+				// Modified dates are unreliable when uploading to MTP devices
+				return sourceComparisonInfo.Length == targetComparisonInfo.Length;
+			}
+			return sourceComparisonInfo.Equals(targetComparisonInfo);
 		}
 
 		public string[] GetFiles(string folder)

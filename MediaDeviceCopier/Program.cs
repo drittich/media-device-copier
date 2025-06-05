@@ -192,7 +192,7 @@ namespace MediaDeviceCopier
 		static string BytesToString(ulong byteCount)
 		{
 			var longByteCount = (long)byteCount;
-			string[] suf = { "B", "KB", "MB", "GB", "TB", "PB", "EB" }; //Longs run out around EB
+			string[] suf = { "B", "KB", "MB", "GB", "TB", "PB", "EB" }; // Longs run out around EB
 			if (longByteCount == 0)
 				return "0" + suf[0];
 			long bytes = Math.Abs(longByteCount);
