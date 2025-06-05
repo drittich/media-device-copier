@@ -5,6 +5,10 @@ VisualStudioVersion = 17.7.34221.43
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaDeviceCopier", "MediaDeviceCopier\MediaDeviceCopier.csproj", "{4FCD9EE1-D340-45D7-9885-94E7E9D31581}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaDeviceCopier.Tests.Mocked", "MediaDeviceCopier.Tests.Mocked\MediaDeviceCopier.Tests.Mocked.csproj", "{D7A47BF9-6548-4B5C-B4C9-4C9531BB3CB9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaDeviceCopier.Tests.RealDevice", "MediaDeviceCopier.Tests.RealDevice\MediaDeviceCopier.Tests.RealDevice.csproj", "{502B0405-4FFB-4754-80FA-CF7DE58F92C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4FCD9EE1-D340-45D7-9885-94E7E9D31581}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7A47BF9-6548-4B5C-B4C9-4C9531BB3CB9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7A47BF9-6548-4B5C-B4C9-4C9531BB3CB9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7A47BF9-6548-4B5C-B4C9-4C9531BB3CB9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7A47BF9-6548-4B5C-B4C9-4C9531BB3CB9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{502B0405-4FFB-4754-80FA-CF7DE58F92C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{502B0405-4FFB-4754-80FA-CF7DE58F92C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{502B0405-4FFB-4754-80FA-CF7DE58F92C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{502B0405-4FFB-4754-80FA-CF7DE58F92C3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
