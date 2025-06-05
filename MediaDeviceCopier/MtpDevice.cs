@@ -139,9 +139,9 @@ namespace MediaDeviceCopier
 
 			_device.UploadFile(sourceFilePath, targetFilePath);
 
-			// TODO: figure out how to set the file date to match the source file
-			// set the file date to match the source file
-			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+                        // TODO: figure out how to set the file date to match the source file
+                        // set the file date to match the source file
+                        mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(targetFilePath));
 			//File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
 
 			fileCopyInfo = new()
@@ -157,24 +157,25 @@ namespace MediaDeviceCopier
 			FileComparisonInfo sourceComparisonInfo;
 			FileComparisonInfo targetComparisonInfo;
 
-			if (fileCopyMode is FileCopyMode.Download)
-			{
-				sourceComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
-				mtpFileComparisonInfo = sourceComparisonInfo;
-				targetComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
-			}
-			else if (fileCopyMode is FileCopyMode.Upload)
-			{
-				sourceComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
-				targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
-				mtpFileComparisonInfo = targetComparisonInfo;
-			}
-			else
-			{
-				throw new NotImplementedException();
-			}
-
-			return sourceComparisonInfo.Equals(targetComparisonInfo);
+                        if (fileCopyMode is FileCopyMode.Download)
+                        {
+                                sourceComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+                                mtpFileComparisonInfo = sourceComparisonInfo;
+                                targetComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
+                                return sourceComparisonInfo.Equals(targetComparisonInfo);
+                        }
+                        else if (fileCopyMode is FileCopyMode.Upload)
+                        {
+                                sourceComparisonInfo = GetComparisonInfo(new FileInfo(sourceFilePath));
+                                targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(targetFilePath));
+                                mtpFileComparisonInfo = targetComparisonInfo;
+                                // Uploaded files do not preserve modified dates, so compare only length
+                                return sourceComparisonInfo.Length == targetComparisonInfo.Length;
+                        }
+                        else
+                        {
+                                throw new NotImplementedException();
+                        }
 		}
 
 		public string[] GetFiles(string folder)
