@@ -5,8 +5,8 @@ namespace MediaDeviceCopier
 	public class MtpDevice : IDisposable
 	{
 		private bool _disposed;
-		private readonly MediaDevice _device;
-		public MtpDevice(MediaDevice device)
+		private readonly IMediaDevice _device;
+		public MtpDevice(IMediaDevice device)
 		{
 			_device = device;
 		}
@@ -21,28 +21,38 @@ namespace MediaDeviceCopier
 			_device.Connect();
 		}
 
-		private static List<MediaDevice>? _listDevices;
-		public static List<MediaDevice> GetAll()
-		{
-			_listDevices ??= MediaDevice.GetDevices()
-					.OrderBy(d => d.FriendlyName)
-					.ToList();
+                private static List<MtpDevice>? _listDevices;
+                private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () =>
+                        MediaDevices.MediaDevice.GetDevices()
+                                .Select(d => (IMediaDevice)new MediaDeviceWrapper(d));
 
-			return _listDevices;
-		}
+                public static Func<IEnumerable<IMediaDevice>> DeviceFactory
+                {
+                        get => _deviceFactory;
+                        set
+                        {
+                                _deviceFactory = value;
+                                _listDevices = null;
+                        }
+                }
 
-		public static MtpDevice? GetByName(string deviceName)
-		{
-			var device = GetAll()
-				.FirstOrDefault(d => d.FriendlyName.Equals(deviceName, StringComparison.InvariantCultureIgnoreCase));
+                public static List<MtpDevice> GetAll()
+                {
+                        _listDevices ??= DeviceFactory()
+                                .OrderBy(d => d.FriendlyName)
+                                .Select(d => new MtpDevice(d))
+                                .ToList();
 
-			if (device is null)
-			{
-				return null;
-			}
+                        return _listDevices;
+                }
 
-			return new MtpDevice(device);
-		}
+                public static MtpDevice? GetByName(string deviceName)
+                {
+                        var device = GetAll()
+                                .FirstOrDefault(d => d.FriendlyName.Equals(deviceName, StringComparison.InvariantCultureIgnoreCase));
+
+                        return device;
+                }
 
 		public MediaFileInfo GetFileInfo(string filePath)
 		{
