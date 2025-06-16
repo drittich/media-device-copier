@@ -39,30 +39,33 @@ namespace MediaDeviceCopier
 			var skipExistingFilesOption = new Option<bool?>(
 				new[] { "--skip-existing", "-se" },
 				description: "Whether to skip existing files (default: true).");
-            
+
 			var copyRecursiveOption = new Option<bool?>(
-			    new[] { "--copy-recursive", "-r" },
-			    description: "Copy folders recursive (default: false).");
+				new[] { "--copy-recursive", "-r" },
+				description: "Copy folders recursively (default: false).");
 
 			var FilterSubFolderPattern = new Option<string>(
-			     new[] { "--filter-subfolder-regex-pattern", "-p" },
-			    description: "Optional: Include only subfolders which matches the regular expression pattern. Default copy all subfolders. This is for (expert) users who are familiar with reg expressions."
-                )
+				 new[] { "--filter-subfolder-regex-pattern", "-p" },
+				description: "Optional: Include only subfolders which match the regular expression pattern (default: copy all)."
+				)
 			{
-			    IsRequired = false
+				IsRequired = false
 			};
-			FilterSubFolderPattern.AddValidator(ValidateRegEx => {
-			    try
-			    {
-			        Regex TempRegEx = new Regex(ValidateRegEx.Tokens[0].Value);
-			    }
-			    catch (Exception Ex)
-			    {
-			        ValidateRegEx.ErrorMessage = $"Invalid regular expression. Error: {Ex.Message}";
-			    }
+
+			FilterSubFolderPattern.AddValidator(ValidateRegEx =>
+			{
+				try
+				{
+					Regex TempRegEx = new Regex(ValidateRegEx.Tokens[0].Value);
+				}
+				catch (Exception Ex)
+				{
+					ValidateRegEx.ErrorMessage = $"Invalid regular expression. Error: {Ex.Message}";
+				}
 			});
-            // create commands
-            var rootCommand = new RootCommand("MediaDeviceCopier");
+
+			// create commands
+			var rootCommand = new RootCommand("MediaDeviceCopier");
 
 			var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
 			listDevicesCommand.AddAlias("l");
@@ -76,7 +79,7 @@ namespace MediaDeviceCopier
 			uploadCommand.AddOption(skipExistingFilesOption);
 			uploadCommand.AddOption(copyRecursiveOption);
 			uploadCommand.AddOption(FilterSubFolderPattern);
-            rootCommand.AddCommand(uploadCommand);
+			rootCommand.AddCommand(uploadCommand);
 
 			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
 			downloadCommand.AddAlias("d");
@@ -86,7 +89,7 @@ namespace MediaDeviceCopier
 			downloadCommand.AddOption(skipExistingFilesOption);
 			downloadCommand.AddOption(copyRecursiveOption);
 			downloadCommand.AddOption(FilterSubFolderPattern);
-            rootCommand.AddCommand(downloadCommand);
+			rootCommand.AddCommand(downloadCommand);
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
@@ -116,50 +119,50 @@ namespace MediaDeviceCopier
 			Regex? FilterFolderPattern = null;
 			if (!string.IsNullOrEmpty(FilterSubFolderPattern))
 			{
-			    FilterFolderPattern = new Regex(FilterSubFolderPattern);
+				FilterFolderPattern = new Regex(FilterSubFolderPattern);
 			}
 
-            // recursice copy?
-            if (recursive ??= false)
+			// recursive copy?
+			if (recursive ??= false)
 			{
-			    string[] SubFolders;
-			    if (fileCopyMode == FileCopyMode.Download)
-			    {
-			        SubFolders = device.GetDirectories(sourceFolder);
-			    }
-			    else
-			    {
-			        SubFolders = Directory.GetDirectories(sourceFolder).ToArray();
-			    }
-			    Array.Sort(SubFolders);
-			    System.Diagnostics.Debug.WriteLine($"Found {SubFolders.Length} windows subdirectories:{string.Join("\r\n", SubFolders)}");
-			    Console.WriteLine($"Found {SubFolders.Length} device subdirectories.");
-			    // Console.WriteLine($"Found {SubFolders.Length} device subdirectories:{string.Join("\r\n", SubFolders)}");
-			
-			    foreach (string SubFolderFullPath in SubFolders)
-			    {
-			        DirectoryInfo Directory = new System.IO.DirectoryInfo(SubFolderFullPath);
-			        string? SubFolder = Directory.Name;
-			        if (!string.IsNullOrEmpty(SubFolder))
-			        {
+				string[] SubFolders;
+				if (fileCopyMode == FileCopyMode.Download)
+				{
+					SubFolders = device.GetDirectories(sourceFolder);
+				}
+				else
+				{
+					SubFolders = Directory.GetDirectories(sourceFolder).ToArray();
+				}
+				Array.Sort(SubFolders);
+				Debug.WriteLine($"Found {SubFolders.Length} windows subdirectories:{string.Join("\r\n", SubFolders)}");
+				Console.WriteLine($"Found {SubFolders.Length} device subdirectories.");
+				// Console.WriteLine($"Found {SubFolders.Length} device subdirectories:{string.Join("\r\n", SubFolders)}");
+
+				foreach (string SubFolderFullPath in SubFolders)
+				{
+					DirectoryInfo Directory = new System.IO.DirectoryInfo(SubFolderFullPath);
+					string? SubFolder = Directory.Name;
+					if (!string.IsNullOrEmpty(SubFolder))
+					{
 						// Skip on pattern matching...
 						if (FilterFolderPattern != null)
 						{
-						    if (!FilterFolderPattern.Match(SubFolder).Success)
-						    {
-						        Console.WriteLine($"Skipping {SubFolderFullPath}");
-						        continue;
-						    }
+							if (!FilterFolderPattern.Match(SubFolder).Success)
+							{
+								Console.WriteLine($"Skipping {SubFolderFullPath}");
+								continue;
+							}
 						}
-                        string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
-			            // Console.WriteLine($"SUBFULL {SubFolderFullPath} TARGETFULL: {SubTargetFullPath} TARGET:{targetFolder}  SUB:{SubFolder}");
-			            CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern);
-			        }
-			    }
+						string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
+						// Console.WriteLine($"SUBFULL {SubFolderFullPath} TARGETFULL: {SubTargetFullPath} TARGET:{targetFolder}  SUB:{SubFolder}");
+						CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern);
+					}
+				}
 			}
-			
+
 			// Disconnect after copy files recursive
-			if(!device.IsConnected)
+			if (!device.IsConnected)
 				device.Connect();
 
 			string[] files = fileCopyMode is FileCopyMode.Download ? device.GetFiles(sourceFolder) : Directory.GetFiles(sourceFolder);
@@ -187,7 +190,7 @@ namespace MediaDeviceCopier
 				}
 
 				// erase the word "copying" => removed already on Console.Write($"{sourceFilePath}...copying"); 12 line above
-				// Commented out this raises an exception on long pathes with line wrap
+				// Commented out this raises an exception on long paths with line wrap
 				// Console.CursorLeft -= 7;
 
 				WriteCopyResult(fileCopyResultInfo);
@@ -203,31 +206,31 @@ namespace MediaDeviceCopier
 
 			if (!device.DirectoryExists(mtpFolder))
 			{
-				if (recursive==true && fileCopyMode==FileCopyMode.Upload)
+				if (recursive == true && fileCopyMode == FileCopyMode.Upload)
 				{
-				    Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}. Creating...");
-				    device.CreateDirectory(mtpFolder);
+					Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}. Creating...");
+					device.CreateDirectory(mtpFolder);
 				}
 				else
 				{
-				    Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}");
-				    Environment.Exit(1);
+					Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}");
+					Environment.Exit(1);
 				}
-            }
+			}
 			if (!Directory.Exists(windowsFolder))
 			{
 				Console.WriteLine($"Windows folder does not exist: {windowsFolder}");
 				if (recursive == true && fileCopyMode == FileCopyMode.Download)
 				{
-				    Console.WriteLine("Creating folder...");
-				    Directory.CreateDirectory(windowsFolder);
+					Console.WriteLine("Creating folder...");
+					Directory.CreateDirectory(windowsFolder);
 				}
 				else
 				{
-				    Console.WriteLine();
-				    Environment.Exit(1);
+					Console.WriteLine();
+					Environment.Exit(1);
 				}
-            }
+			}
 		}
 
 		private static void WriteCopyResult(FileCopyResultInfo fileCopyResultInfo)

@@ -66,7 +66,7 @@ Examples
 
 Copy a pictures from an iPhone recursive and skip already copied images
 ```
-MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r"
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r
 ```
 
 Copy all pictures from an iPhone recursive, skip already copied images and only folders which are beginning with 2025
