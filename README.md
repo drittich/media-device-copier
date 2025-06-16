@@ -1,9 +1,21 @@
 # media-device-copier
-A Windows command-line utility for copying files from phones and other media devices connected as MTP devices
+**Media Device Copier** is a Windows command-line utility for copying files to and from phones and other devices connected via MTP (Media Transfer Protocol).
 
-You have command to list devices, upload files to the device, or download files from the device.
+Easily list connected devices, upload files to your device, or download files from your device—all from the command line.
 
+
+---
+
+## Features
+
+- **List devices:** See all connected MTP devices.
+- **Upload files:** Transfer files or folders to your device.
+- **Download files:** Copy files or folders from your device to your PC.
+- **Skip existing files:** Optionally avoid re-copying files.
+- **Recursive copy:** Copy entire folder structures if needed.
+- **Folder filtering:** Use regex patterns to include only matching subfolders.
 ```
+
 PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe -h
 Description:
   MediaDeviceCopier
@@ -62,14 +74,42 @@ Options:
   -p, --filter-subfolder-regex-pattern <filter-subfolder-regex-pattern>  Optional: Include only subfolders which matches the regular expression pattern. Default copy all subfolders
   -?, -h, --help                                  Show help and usage information
 ```
-Examples
+## Examples
 
-Copy a pictures from an iPhone recursive and skip already copied images
+Copy pictures from an iPhone recursively and skip already-copied images:
 ```
 MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r
 ```
 
-Copy all pictures from an iPhone recursive, skip already copied images and only folders which are beginning with 2025
+Copy all pictures from an iPhone recursively, skip already copied images and only copy folders beginning with 2025:
 ```
 MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t D:\MyPictureFolder" -se -r -p "^2025.*"
 ```
+
+## Tips
+
+- Always use `list-devices` first to get the correct device name.
+- Use double quotes around folder names if they contain spaces.
+- Regular expressions in `-p` follow standard .NET regex syntax.
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Contributing
+
+Contributions, issues, and feature requests are welcome!
+
+---
+
+## Support
+
+If you encounter issues or need help, please open an issue on the repository.
+
+---
+
+*Happy copying!*
