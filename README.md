@@ -38,6 +38,7 @@ Options:
   -s, --source-folder <source-folder> (REQUIRED)  The folder we'll be copying files from.
   -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
   -se, --skip-existing                            Whether to skip existing files (default: true).
+  -r, --copy-recursive                            Copy folders recursive (default: false).  
   -?, -h, --help                                  Show help and usage information
 ```
 
@@ -56,5 +57,6 @@ Options:
   -s, --source-folder <source-folder> (REQUIRED)  The folder we'll be copying files from.
   -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
   -se, --skip-existing                            Whether to skip existing files (default: true).
+  -r, --copy-recursive                            Copy folders recursive (default: false).
   -?, -h, --help                                  Show help and usage information
 ```
