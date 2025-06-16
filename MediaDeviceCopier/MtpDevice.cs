@@ -21,10 +21,20 @@ namespace MediaDeviceCopier
 			_device.Connect();
 		}
 
+		public bool IsConnected
+		{
+			get
+			{
+				if (_device == null)
+					return false;
+				else
+					return _device.IsConnected;
+			}
+		}
+
 		private static List<MtpDevice>? _listDevices;
-		private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () =>
-				MediaDevices.MediaDevice.GetDevices()
-						.Select(d => (IMediaDevice)new MediaDeviceWrapper(d));
+		private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () => MediaDevice.GetDevices()
+			.Select(d => (IMediaDevice)new MediaDeviceWrapper(d));
 
 		public static Func<IEnumerable<IMediaDevice>> DeviceFactory
 		{
@@ -218,6 +228,28 @@ namespace MediaDeviceCopier
 				Length = (ulong)fileInfo.Length,
 				ModifiedDate = fileInfo.LastWriteTime
 			};
+		}
+
+		public string[] GetDirectories(string folder)
+		{
+			if (!_device.DirectoryExists(folder))
+			{
+				throw new DirectoryNotFoundException($"Folder not found: {folder}");
+			}
+
+			return _device.GetDirectories(folder);
+		}
+
+		public void CreateDirectory(string folder)
+		{
+			try
+			{
+				_device.CreateDirectory(folder);
+			}
+			catch (Exception ex)
+			{
+				throw new IOException($"Cannot create directory {ex.Message}");
+			}
 		}
 
 		public bool DirectoryExists(string folder)

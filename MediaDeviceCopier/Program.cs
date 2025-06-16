@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace MediaDeviceCopier
 {
@@ -39,6 +40,30 @@ namespace MediaDeviceCopier
 				new[] { "--skip-existing", "-se" },
 				description: "Whether to skip existing files (default: true).");
 
+			var copyRecursiveOption = new Option<bool?>(
+				new[] { "--copy-recursive", "-r" },
+				description: "Copy folders recursively (default: false).");
+
+			var FilterSubFolderPattern = new Option<string>(
+				 new[] { "--filter-subfolder-regex-pattern", "-p" },
+				description: "Optional: Include only subfolders which match the regular expression pattern (default: copy all)."
+				)
+			{
+				IsRequired = false
+			};
+
+			FilterSubFolderPattern.AddValidator(ValidateRegEx =>
+			{
+				try
+				{
+					Regex TempRegEx = new Regex(ValidateRegEx.Tokens[0].Value);
+				}
+				catch (Exception Ex)
+				{
+					ValidateRegEx.ErrorMessage = $"Invalid regular expression. Error: {Ex.Message}";
+				}
+			});
+
 			// create commands
 			var rootCommand = new RootCommand("MediaDeviceCopier");
 
@@ -52,6 +77,8 @@ namespace MediaDeviceCopier
 			uploadCommand.AddOption(sourceFolderOption);
 			uploadCommand.AddOption(targetFolderOption);
 			uploadCommand.AddOption(skipExistingFilesOption);
+			uploadCommand.AddOption(copyRecursiveOption);
+			uploadCommand.AddOption(FilterSubFolderPattern);
 			rootCommand.AddCommand(uploadCommand);
 
 			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
@@ -60,34 +87,87 @@ namespace MediaDeviceCopier
 			downloadCommand.AddOption(sourceFolderOption);
 			downloadCommand.AddOption(targetFolderOption);
 			downloadCommand.AddOption(skipExistingFilesOption);
+			downloadCommand.AddOption(copyRecursiveOption);
+			downloadCommand.AddOption(FilterSubFolderPattern);
 			rootCommand.AddCommand(downloadCommand);
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
 
-			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting) =>
+			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
 			{
-				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting);
+				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
 
-			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting) =>
+			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
 			{
-				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting);
+				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
 			return rootCommand;
 		}
 
-		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting)
+		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? FilterSubFolderPattern)
 		{
 			var sw = Stopwatch.StartNew();
 			var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
 
 			using var device = GetDeviceByName(deviceName);
+
+			// Subfolder filter by regexpression
+			Regex? FilterFolderPattern = null;
+			if (!string.IsNullOrEmpty(FilterSubFolderPattern))
+			{
+				FilterFolderPattern = new Regex(FilterSubFolderPattern);
+			}
+
+			// recursive copy?
+			if (recursive ??= false)
+			{
+				string[] SubFolders;
+				if (fileCopyMode == FileCopyMode.Download)
+				{
+					SubFolders = device.GetDirectories(sourceFolder);
+				}
+				else
+				{
+					SubFolders = Directory.GetDirectories(sourceFolder).ToArray();
+				}
+				Array.Sort(SubFolders);
+				Debug.WriteLine($"Found {SubFolders.Length} windows subdirectories:{string.Join("\r\n", SubFolders)}");
+				Console.WriteLine($"Found {SubFolders.Length} device subdirectories.");
+				// Console.WriteLine($"Found {SubFolders.Length} device subdirectories:{string.Join("\r\n", SubFolders)}");
+
+				foreach (string SubFolderFullPath in SubFolders)
+				{
+					DirectoryInfo Directory = new System.IO.DirectoryInfo(SubFolderFullPath);
+					string? SubFolder = Directory.Name;
+					if (!string.IsNullOrEmpty(SubFolder))
+					{
+						// Skip on pattern matching...
+						if (FilterFolderPattern != null)
+						{
+							if (!FilterFolderPattern.Match(SubFolder).Success)
+							{
+								Console.WriteLine($"Skipping {SubFolderFullPath}");
+								continue;
+							}
+						}
+						string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
+						// Console.WriteLine($"SUBFULL {SubFolderFullPath} TARGETFULL: {SubTargetFullPath} TARGET:{targetFolder}  SUB:{SubFolder}");
+						CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern);
+					}
+				}
+			}
+
+			// Disconnect after copy files recursive
+			if (!device.IsConnected)
+				device.Connect();
+
 			string[] files = fileCopyMode is FileCopyMode.Download ? device.GetFiles(sourceFolder) : Directory.GetFiles(sourceFolder);
 
-			ValidateFolders(fileCopyMode, device, sourceFolder, targetFolder);
+			ValidateFolders(fileCopyMode, device, sourceFolder, targetFolder, recursive);
 
 			var count = files.Length;
 			ulong bytesCopied = 0;
@@ -97,7 +177,7 @@ namespace MediaDeviceCopier
 			foreach (var sourceFilePath in files.OrderBy(d => d))
 			{
 				var targetFilePath = Path.Combine(targetFolder, Path.GetFileName(sourceFilePath));
-				Console.Write($"{sourceFilePath}...copying");
+				Console.Write($"{sourceFilePath}...");
 
 				var fileCopyResultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ??= true);
 				if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
@@ -109,8 +189,9 @@ namespace MediaDeviceCopier
 					bytesCopied += fileCopyResultInfo.Length;
 				}
 
-				// erase the word "copying" 
-				Console.CursorLeft -= 7;
+				// erase the word "copying" => removed already on Console.Write($"{sourceFilePath}...copying"); 12 line above
+				// Commented out this raises an exception on long paths with line wrap
+				// Console.CursorLeft -= 7;
 
 				WriteCopyResult(fileCopyResultInfo);
 			}
@@ -118,20 +199,37 @@ namespace MediaDeviceCopier
 			Console.WriteLine($"Elapsed time: {sw.Elapsed.ToString(@"hh\:mm\:ss\.ff")}");
 		}
 
-		private static void ValidateFolders(FileCopyMode fileCopyMode, MtpDevice device, string sourceFolder, string targetFolder)
+		private static void ValidateFolders(FileCopyMode fileCopyMode, MtpDevice device, string sourceFolder, string targetFolder, bool? recursive)
 		{
 			string mtpFolder = fileCopyMode is FileCopyMode.Download ? sourceFolder : targetFolder;
 			string windowsFolder = fileCopyMode is FileCopyMode.Download ? targetFolder : sourceFolder;
 
 			if (!device.DirectoryExists(mtpFolder))
 			{
-				Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}");
-				Environment.Exit(1);
+				if (recursive == true && fileCopyMode == FileCopyMode.Upload)
+				{
+					Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}. Creating...");
+					device.CreateDirectory(mtpFolder);
+				}
+				else
+				{
+					Console.WriteLine($"[{device.FriendlyName}] folder does not exist: {mtpFolder}");
+					Environment.Exit(1);
+				}
 			}
 			if (!Directory.Exists(windowsFolder))
 			{
 				Console.WriteLine($"Windows folder does not exist: {windowsFolder}");
-				Environment.Exit(1);
+				if (recursive == true && fileCopyMode == FileCopyMode.Download)
+				{
+					Console.WriteLine("Creating folder...");
+					Directory.CreateDirectory(windowsFolder);
+				}
+				else
+				{
+					Console.WriteLine();
+					Environment.Exit(1);
+				}
 			}
 		}
 
