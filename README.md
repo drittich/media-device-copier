@@ -38,7 +38,8 @@ Options:
   -s, --source-folder <source-folder> (REQUIRED)  The folder we'll be copying files from.
   -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
   -se, --skip-existing                            Whether to skip existing files (default: true).
-  -r, --copy-recursive                            Copy folders recursive (default: false).  
+  -r, --copy-recursive                            Copy folders recursive (default: false). 
+  -p, --filter-subfolder-regex-pattern <filter-subfolder-regex-pattern>  Optional: Include only subfolders which matches the regular expression pattern. Default copy all subfolders   
   -?, -h, --help                                  Show help and usage information
 ```
 
@@ -58,5 +59,17 @@ Options:
   -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
   -se, --skip-existing                            Whether to skip existing files (default: true).
   -r, --copy-recursive                            Copy folders recursive (default: false).
+  -p, --filter-subfolder-regex-pattern <filter-subfolder-regex-pattern>  Optional: Include only subfolders which matches the regular expression pattern. Default copy all subfolders
   -?, -h, --help                                  Show help and usage information
+```
+Examples
+
+Copy a pictures from an iPhone recursive and skip already copied images
+```
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r"
+```
+
+Copy all pictures from an iPhone recursive, skip already copied images and only folders which are beginning with 2025
+```
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t D:\MyPictureFolder" -se -r -p "^2025.*"
 ```
