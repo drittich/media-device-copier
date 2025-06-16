@@ -20,6 +20,8 @@ internal class MockMediaDevice : IMediaDevice
 
     public void UploadFile(string sourceFilePath, string targetFilePath) => _files[targetFilePath] = File.ReadAllBytes(sourceFilePath);
 
+    public string[] GetDirectories(string folder) => throw new NotImplementedException();
+    public void CreateDirectory(string folder) => throw new NotImplementedException();
     public bool DirectoryExists(string folder) => _folders.Contains(folder);
 
     public string[] GetFiles(string folder)

@@ -21,6 +21,18 @@ namespace MediaDeviceCopier
 			_device.Connect();
 		}
 
+		public bool IsConnected {
+			get
+			{
+				if (_device == null)
+					return false;
+				else
+					return _device.IsConnected;
+			}
+		}
+		
+			
+
 		private static List<MtpDevice>? _listDevices;
 		private static Func<IEnumerable<IMediaDevice>> _deviceFactory = () =>
 				MediaDevices.MediaDevice.GetDevices()
@@ -220,6 +232,26 @@ namespace MediaDeviceCopier
 			};
 		}
 
+		public string[] GetDirectories(string folder)
+		{
+		    if (!_device.DirectoryExists(folder))
+		    {
+		        throw new DirectoryNotFoundException($"Folder not found: {folder}");
+		    }
+		
+		    return _device.GetDirectories(folder);
+		}
+		public void CreateDirectory(string folder)
+		{
+		    try
+		    {
+		        _device.CreateDirectory(folder);
+		    }
+		    catch (Exception Ex)
+		    {
+		        throw new IOException(string.Format("Cannot create directory {folder}", Ex.Message));
+		    }
+		}
 		public bool DirectoryExists(string folder)
 		{
 			return _device.DirectoryExists(folder);
