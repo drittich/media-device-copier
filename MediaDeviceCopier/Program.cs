@@ -44,8 +44,25 @@ namespace MediaDeviceCopier
 			    new[] { "--copy-recursive", "-r" },
 			    description: "Copy folders recursive (default: false).");
 
-			// create commands
-			var rootCommand = new RootCommand("MediaDeviceCopier");
+			var FilterSubFolderPattern = new Option<string>(
+			     new[] { "--filter-subfolder-regex-pattern", "-p" },
+			    description: "Optional: Include only subfolders which matches the regular expression pattern. Default copy all subfolders. This is for (expert) users who are familiar with reg expressions."
+                )
+			{
+			    IsRequired = false
+			};
+			FilterSubFolderPattern.AddValidator(ValidateRegEx => {
+			    try
+			    {
+			        Regex TempRegEx = new Regex(ValidateRegEx.Tokens[0].Value);
+			    }
+			    catch (Exception Ex)
+			    {
+			        ValidateRegEx.ErrorMessage = $"Invalid regular expression. Error: {Ex.Message}";
+			    }
+			});
+            // create commands
+            var rootCommand = new RootCommand("MediaDeviceCopier");
 
 			var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
 			listDevicesCommand.AddAlias("l");
@@ -58,7 +75,8 @@ namespace MediaDeviceCopier
 			uploadCommand.AddOption(targetFolderOption);
 			uploadCommand.AddOption(skipExistingFilesOption);
 			uploadCommand.AddOption(copyRecursiveOption);
-			rootCommand.AddCommand(uploadCommand);
+			uploadCommand.AddOption(FilterSubFolderPattern);
+            rootCommand.AddCommand(uploadCommand);
 
 			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
 			downloadCommand.AddAlias("d");
@@ -67,33 +85,42 @@ namespace MediaDeviceCopier
 			downloadCommand.AddOption(targetFolderOption);
 			downloadCommand.AddOption(skipExistingFilesOption);
 			downloadCommand.AddOption(copyRecursiveOption);
-			rootCommand.AddCommand(downloadCommand);
+			downloadCommand.AddOption(FilterSubFolderPattern);
+            rootCommand.AddCommand(downloadCommand);
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
 
-			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption) =>
+			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
 			{
-				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption);
+				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
 
-			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption) =>
+			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
 			{
-				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption);
+				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
 			return rootCommand;
 		}
 
-		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive)
+		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? FilterSubFolderPattern)
 		{
 			var sw = Stopwatch.StartNew();
 			var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
 
 			using var device = GetDeviceByName(deviceName);
-			// recursice copy?
-			if (recursive ??= false)
+
+			// Subfolder filter by regexpression
+			Regex? FilterFolderPattern = null;
+			if (!string.IsNullOrEmpty(FilterSubFolderPattern))
+			{
+			    FilterFolderPattern = new Regex(FilterSubFolderPattern);
+			}
+
+            // recursice copy?
+            if (recursive ??= false)
 			{
 			    string[] SubFolders;
 			    if (fileCopyMode == FileCopyMode.Download)
@@ -115,9 +142,18 @@ namespace MediaDeviceCopier
 			        string? SubFolder = Directory.Name;
 			        if (!string.IsNullOrEmpty(SubFolder))
 			        {
-			            string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
+						// Skip on pattern matching...
+						if (FilterFolderPattern != null)
+						{
+						    if (!FilterFolderPattern.Match(SubFolder).Success)
+						    {
+						        Console.WriteLine($"Skipping {SubFolderFullPath}");
+						        continue;
+						    }
+						}
+                        string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
 			            // Console.WriteLine($"SUBFULL {SubFolderFullPath} TARGETFULL: {SubTargetFullPath} TARGET:{targetFolder}  SUB:{SubFolder}");
-			            CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive);
+			            CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern);
 			        }
 			    }
 			}
