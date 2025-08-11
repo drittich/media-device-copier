@@ -123,7 +123,11 @@ namespace MediaDeviceCopier
 
 			// set the file date to match the source file
 			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
-			File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+			if (IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
+			{
+				File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+			}
+			// If timestamp is invalid, skip setting it but continue with file operation
 
 			fileCopyInfo = new()
 			{
@@ -228,6 +232,22 @@ namespace MediaDeviceCopier
 				Length = (ulong)fileInfo.Length,
 				ModifiedDate = fileInfo.LastWriteTime
 			};
+		}
+
+		/// <summary>
+		/// Validates if a DateTime can be safely converted to Win32 FileTime.
+		/// Win32 FileTime has a valid range from January 1, 1601 to a far future date.
+		/// </summary>
+		/// <param name="dateTime">The DateTime to validate</param>
+		/// <returns>True if the DateTime is valid for Win32 FileTime conversion</returns>
+		public static bool IsValidWin32FileTime(DateTime dateTime)
+		{
+			// Win32 FileTime minimum is January 1, 1601
+			var minFileTime = DateTime.FromFileTime(0);
+			// Use a reasonable maximum date to avoid edge cases
+			var maxFileTime = new DateTime(9999, 12, 31, 23, 59, 59, DateTimeKind.Local);
+
+			return dateTime >= minFileTime && dateTime <= maxFileTime;
 		}
 
 		public string[] GetDirectories(string folder)

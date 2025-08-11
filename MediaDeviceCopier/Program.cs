@@ -16,36 +16,36 @@ namespace MediaDeviceCopier
 		{
 			// create options
 			var deviceNameOption = new Option<string>(
-				new[] { "--device-name", "-n" },
+				["--device-name", "-n"],
 				description: "The MTP device we'll be copying files to/from.")
 			{
 				IsRequired = true
 			};
 
 			var sourceFolderOption = new Option<string>(
-				new[] { "--source-folder", "-s" },
+				["--source-folder", "-s"],
 				description: "The folder we'll be copying files from.")
 			{
 				IsRequired = true
 			};
 
 			var targetFolderOption = new Option<string>(
-				new[] { "--target-folder", "-t" },
+				["--target-folder", "-t"],
 				description: "The folder we'll be copying files to.")
 			{
 				IsRequired = true
 			};
 
 			var skipExistingFilesOption = new Option<bool?>(
-				new[] { "--skip-existing", "-se" },
+				["--skip-existing", "-se"],
 				description: "Whether to skip existing files (default: true).");
 
 			var copyRecursiveOption = new Option<bool?>(
-				new[] { "--copy-recursive", "-r" },
+				["--copy-recursive", "-r"],
 				description: "Copy folders recursively (default: false).");
 
 			var FilterSubFolderPattern = new Option<string>(
-				 new[] { "--filter-subfolder-regex-pattern", "-p" },
+				 ["--filter-subfolder-regex-pattern", "-p"],
 				description: "Optional: Include only subfolders which match the regular expression pattern (default: copy all)."
 				)
 			{
@@ -56,7 +56,7 @@ namespace MediaDeviceCopier
 			{
 				try
 				{
-					Regex TempRegEx = new Regex(ValidateRegEx.Tokens[0].Value);
+					Regex TempRegEx = new(ValidateRegEx.Tokens[0].Value);
 				}
 				catch (Exception Ex)
 				{
@@ -132,7 +132,7 @@ namespace MediaDeviceCopier
 				}
 				else
 				{
-					SubFolders = Directory.GetDirectories(sourceFolder).ToArray();
+					SubFolders = [.. Directory.GetDirectories(sourceFolder)];
 				}
 				Array.Sort(SubFolders);
 				Debug.WriteLine($"Found {SubFolders.Length} windows subdirectories:{string.Join("\r\n", SubFolders)}");
@@ -141,7 +141,7 @@ namespace MediaDeviceCopier
 
 				foreach (string SubFolderFullPath in SubFolders)
 				{
-					DirectoryInfo Directory = new System.IO.DirectoryInfo(SubFolderFullPath);
+					DirectoryInfo Directory = new(SubFolderFullPath);
 					string? SubFolder = Directory.Name;
 					if (!string.IsNullOrEmpty(SubFolder))
 					{
@@ -196,7 +196,7 @@ namespace MediaDeviceCopier
 				WriteCopyResult(fileCopyResultInfo);
 			}
 			Console.WriteLine($"Done, copied {BytesToString(bytesCopied)}, skipped {BytesToString(bytesNotCopied)}");
-			Console.WriteLine($"Elapsed time: {sw.Elapsed.ToString(@"hh\:mm\:ss\.ff")}");
+			Console.WriteLine($"Elapsed time: {sw.Elapsed:hh\\:mm\\:ss\\.ff}");
 		}
 
 		private static void ValidateFolders(FileCopyMode fileCopyMode, MtpDevice device, string sourceFolder, string targetFolder, bool? recursive)
@@ -290,7 +290,7 @@ namespace MediaDeviceCopier
 		static string BytesToString(ulong byteCount)
 		{
 			var longByteCount = (long)byteCount;
-			string[] suf = { "B", "KB", "MB", "GB", "TB", "PB", "EB" }; // Longs run out around EB
+			string[] suf = ["B", "KB", "MB", "GB", "TB", "PB", "EB"]; // Longs run out around EB
 			if (longByteCount == 0)
 				return "0" + suf[0];
 			long bytes = Math.Abs(longByteCount);
