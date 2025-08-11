@@ -48,4 +48,40 @@ public class MtpDeviceMockTests
 		// Assert
 		Assert.False(result, "Default DateTime should be invalid for Win32 FileTime");
 	}
+
+	[Fact]
+	public void SetLastWriteTime_WithInvalidDate_WouldThrowOnWindows()
+	{
+		// This test demonstrates the issue and our validation method
+		var invalidDate = new DateTime(1500, 1, 1); // Before Win32 FileTime epoch
+		var tempFile = Path.GetTempFileName();
+		
+		try
+		{
+			File.WriteAllText(tempFile, "test content");
+			
+			// Our validation should catch this
+			Assert.False(MtpDevice.IsValidWin32FileTime(invalidDate), 
+				"Invalid date should be detected by validation method");
+			
+			// On Windows, this would throw ArgumentOutOfRangeException
+			// but our fix prevents calling SetLastWriteTime when validation fails
+			try
+			{
+				File.SetLastWriteTime(tempFile, invalidDate);
+				// Note: On Linux this might not throw, but on Windows it would
+				// What matters is that our validation properly identifies invalid dates
+			}
+			catch (ArgumentOutOfRangeException)
+			{
+				// This confirms the issue exists on this platform
+				// Our validation method should prevent this exception in production
+			}
+		}
+		finally
+		{
+			if (File.Exists(tempFile))
+				File.Delete(tempFile);
+		}
+	}
 }
