@@ -1,8 +1,8 @@
 ﻿namespace MediaDeviceCopier
 {
-	public enum FileCopyMode
-	{
-		Download,
-		Upload
-	}
+    public enum FileCopyMode
+    {
+        Download,
+        Upload
+    }
 }

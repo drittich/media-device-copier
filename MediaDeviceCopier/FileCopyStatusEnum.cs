@@ -1,9 +1,9 @@
 ﻿namespace MediaDeviceCopier
 {
-	public enum FileCopyStatus
-	{
-		Copied,
-		CopiedBecauseDateOrSizeMismatch,
-		SkippedBecauseAlreadyExists
-	}
+    public enum FileCopyStatus
+    {
+        Copied,
+        CopiedBecauseDateOrSizeMismatch,
+        SkippedBecauseAlreadyExists
+    }
 }
