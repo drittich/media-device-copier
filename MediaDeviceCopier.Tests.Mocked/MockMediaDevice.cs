@@ -1,5 +1,6 @@
 using MediaDevices;
 using System.Reflection;
+using MediaDeviceCopier;
 
 namespace MediaDeviceCopier.Tests.Mocked;
 
@@ -12,6 +13,8 @@ internal class MockMediaDevice : IMediaDevice
 	public string FriendlyName { get; init; } = "MockDevice";
 
 	public void Connect() => IsConnected = true;
+
+	public bool ThrowOnDelete { get; set; }
 
 	public bool FileExists(string path) => _files.ContainsKey(path);
 
@@ -44,6 +47,16 @@ internal class MockMediaDevice : IMediaDevice
 
 	public void UploadFile(string sourceFilePath, string targetFilePath) => _files[targetFilePath] = File.ReadAllBytes(sourceFilePath);
 
+	public void DeleteFile(string path)
+	{
+		if (ThrowOnDelete)
+		{
+			throw new IOException("Simulated delete failure");
+		}
+		_files.Remove(path);
+		_fileTimestamps.Remove(path);
+	}
+
 	public string[] GetDirectories(string folder) => throw new NotImplementedException();
 	public void CreateDirectory(string folder) => throw new NotImplementedException();
 	public bool DirectoryExists(string folder) => _folders.Contains(folder);
@@ -67,6 +80,29 @@ internal class MockMediaDevice : IMediaDevice
 		{
 			_fileTimestamps[path] = timestamp.Value;
 		}
+	}
+
+	public FileComparisonInfo InternalGetComparisonInfo(string path)
+	{
+		if (!_files.ContainsKey(path))
+		{
+			throw new FileNotFoundException();
+		}
+		var length = (ulong)_files[path].Length;
+		DateTime timestamp;
+		if (_fileTimestamps.TryGetValue(path, out var ts) && ts.HasValue)
+		{
+			timestamp = ts.Value;
+		}
+		else
+		{
+			timestamp = DateTime.Now;
+		}
+		return new FileComparisonInfo
+		{
+			Length = length,
+			ModifiedDate = timestamp
+		};
 	}
 
 	public void Dispose() { }

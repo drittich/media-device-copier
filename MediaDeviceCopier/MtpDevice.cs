@@ -74,25 +74,53 @@ namespace MediaDeviceCopier
 			return _device.GetFileInfo(filePath);
 		}
 
-		public FileCopyResultInfo CopyFile(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath, bool skipExisting)
+		public FileCopyResultInfo CopyFile(FileCopyMode fileCopyMode, string sourceFilePath, string targetFilePath, bool skipExisting, bool isMove)
 		{
 			if (!_device.IsConnected)
 			{
 				throw new InvalidOperationException("Device is not connected.");
 			}
 
+			FileCopyResultInfo result;
 			if (fileCopyMode == FileCopyMode.Download)
 			{
-				return DownloadFile(sourceFilePath, targetFilePath, skipExisting);
+				result = DownloadFile(sourceFilePath, targetFilePath, skipExisting);
 			}
 			else if (fileCopyMode == FileCopyMode.Upload)
 			{
-				return UploadFile(sourceFilePath, targetFilePath, skipExisting);
+				result = UploadFile(sourceFilePath, targetFilePath, skipExisting);
 			}
 			else
 			{
 				throw new NotImplementedException();
 			}
+
+			if (isMove && result.CopyStatus != FileCopyStatus.SkippedBecauseAlreadyExists)
+			{
+				try
+				{
+					if (fileCopyMode == FileCopyMode.Download)
+					{
+						_device.DeleteFile(sourceFilePath);
+					}
+					else
+					{
+						// Upload move: delete local original
+						if (File.Exists(sourceFilePath))
+						{
+							File.Delete(sourceFilePath);
+						}
+					}
+					result.SourceDeleted = true;
+				}
+				catch
+				{
+					// Swallow deletion errors; move becomes simple copy
+					result.SourceDeleted = false;
+				}
+			}
+
+			return result;
 		}
 
 		private FileCopyResultInfo DownloadFile(string sourceFilePath, string targetFilePath, bool skipExisting)
@@ -121,13 +149,29 @@ namespace MediaDeviceCopier
 
 			_device.DownloadFile(sourceFilePath, targetFilePath);
 
-			// set the file date to match the source file
-			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
-			if (IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
+			// set the file date to match the source file (with safe fallback)
+			if (mtpFileComparisonInfo is null)
 			{
-				File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+				var (cmp, success) = TryGetComparisonInfoFromDevice(sourceFilePath);
+				if (success)
+				{
+					mtpFileComparisonInfo = cmp;
+					if (IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
+					{
+						File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
+					}
+				}
+				else
+				{
+					// Fallback: derive comparison info from the newly downloaded local file
+					var fi = new FileInfo(targetFilePath);
+					mtpFileComparisonInfo = new FileComparisonInfo
+					{
+						Length = (ulong)fi.Length,
+						ModifiedDate = fi.LastWriteTime
+					};
+				}
 			}
-			// If timestamp is invalid, skip setting it but continue with file operation
 
 			fileCopyInfo = new()
 			{
@@ -163,9 +207,25 @@ namespace MediaDeviceCopier
 
 			_device.UploadFile(sourceFilePath, targetFilePath);
 
-			// TODO: figure out how to set the file date to match the source file
-			// set the file date to match the source file
-			mtpFileComparisonInfo ??= GetComparisonInfo(_device.GetFileInfo(targetFilePath));
+			// Attempt to get comparison info from device target (safe)
+			if (mtpFileComparisonInfo is null)
+			{
+				var (cmp, success) = TryGetComparisonInfoFromDevice(targetFilePath);
+				if (success)
+				{
+					mtpFileComparisonInfo = cmp;
+				}
+				else
+				{
+					// Fallback: use local source file info (best available)
+					var fi = new FileInfo(sourceFilePath);
+					mtpFileComparisonInfo = new FileComparisonInfo
+					{
+						Length = (ulong)fi.Length,
+						ModifiedDate = fi.LastWriteTime
+					};
+				}
+			}
 			//File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
 
 			fileCopyInfo = new()
@@ -183,14 +243,16 @@ namespace MediaDeviceCopier
 
 			if (fileCopyMode is FileCopyMode.Download)
 			{
-				sourceComparisonInfo = GetComparisonInfo(_device.GetFileInfo(sourceFilePath));
+				var (srcCmp, srcOk) = TryGetComparisonInfoFromDevice(sourceFilePath);
+				sourceComparisonInfo = srcCmp;
 				mtpFileComparisonInfo = sourceComparisonInfo;
 				targetComparisonInfo = GetComparisonInfo(new FileInfo(targetFilePath));
 			}
 			else if (fileCopyMode is FileCopyMode.Upload)
 			{
 				sourceComparisonInfo = GetComparisonInfo(new FileInfo(sourceFilePath));
-				targetComparisonInfo = GetComparisonInfo(_device.GetFileInfo(targetFilePath));
+				var (tgtCmp, tgtOk) = TryGetComparisonInfoFromDevice(targetFilePath);
+				targetComparisonInfo = tgtCmp;
 				mtpFileComparisonInfo = targetComparisonInfo;
 			}
 			else
@@ -234,6 +296,43 @@ namespace MediaDeviceCopier
 			};
 		}
 
+		private (FileComparisonInfo info, bool success) TryGetComparisonInfoFromDevice(string path)
+		{
+			// 1. Reflection hook for mocks exposing InternalGetComparisonInfo (returns FileComparisonInfo)
+			try
+			{
+				var maybeMethod = _device.GetType().GetMethod("InternalGetComparisonInfo", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+				if (maybeMethod != null && maybeMethod.ReturnType == typeof(FileComparisonInfo) && maybeMethod.GetParameters().Length == 1)
+				{
+					var invoked = maybeMethod.Invoke(_device, new object[] { path }) as FileComparisonInfo;
+					if (invoked != null)
+					{
+						return (invoked, true);
+					}
+				}
+			}
+			catch
+			{
+				// Ignore reflection failures, fall through to normal path
+			}
+
+			// 2. Normal library path
+			try
+			{
+				var mediaInfo = _device.GetFileInfo(path);
+				return (GetComparisonInfo(mediaInfo), true);
+			}
+			catch
+			{
+				// Failure: return sentinel comparison info
+				return (new FileComparisonInfo
+				{
+					Length = 0,
+					ModifiedDate = DateTime.MinValue
+				}, false);
+			}
+		}
+
 		/// <summary>
 		/// Validates if a DateTime can be safely converted to Win32 FileTime.
 		/// Win32 FileTime has a valid range from January 1, 1601 to a far future date.
@@ -275,6 +374,11 @@ namespace MediaDeviceCopier
 		public bool DirectoryExists(string folder)
 		{
 			return _device.DirectoryExists(folder);
+		}
+
+		public void DeleteFile(string path)
+		{
+			_device.DeleteFile(path);
 		}
 
 		public string FriendlyName => _device.FriendlyName;

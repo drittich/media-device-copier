@@ -44,6 +44,10 @@ namespace MediaDeviceCopier
 				["--copy-recursive", "-r"],
 				description: "Copy folders recursively (default: false).");
 
+			var moveOption = new Option<bool>(
+				["--move", "-mv"],
+				description: "Delete source after successful transfer (move operation).");
+
 			var FilterSubFolderPattern = new Option<string>(
 				 ["--filter-subfolder-regex-pattern", "-p"],
 				description: "Optional: Include only subfolders which match the regular expression pattern (default: copy all)."
@@ -78,6 +82,7 @@ namespace MediaDeviceCopier
 			uploadCommand.AddOption(targetFolderOption);
 			uploadCommand.AddOption(skipExistingFilesOption);
 			uploadCommand.AddOption(copyRecursiveOption);
+			uploadCommand.AddOption(moveOption);
 			uploadCommand.AddOption(FilterSubFolderPattern);
 			rootCommand.AddCommand(uploadCommand);
 
@@ -88,30 +93,32 @@ namespace MediaDeviceCopier
 			downloadCommand.AddOption(targetFolderOption);
 			downloadCommand.AddOption(skipExistingFilesOption);
 			downloadCommand.AddOption(copyRecursiveOption);
+			downloadCommand.AddOption(moveOption);
 			downloadCommand.AddOption(FilterSubFolderPattern);
 			rootCommand.AddCommand(downloadCommand);
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
 
-			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
+			uploadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOptionValue, move, filterSubFolderPattern) =>
 			{
-				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
+				CopyFiles("upload", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOptionValue, filterSubFolderPattern, move);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, moveOption, FilterSubFolderPattern);
 
-			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern) =>
+			downloadCommand.SetHandler((deviceName, sourceFolder, targetFolder, skipExisting, copyRecursiveOptionValue, move, filterSubFolderPattern) =>
 			{
-				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOption, FilterSubFolderPattern);
+				CopyFiles("download", deviceName!, sourceFolder, targetFolder, skipExisting, copyRecursiveOptionValue, filterSubFolderPattern, move);
 			},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, FilterSubFolderPattern);
+				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, moveOption, FilterSubFolderPattern);
 			return rootCommand;
 		}
 
-		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? FilterSubFolderPattern)
+		private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? FilterSubFolderPattern, bool? move)
 		{
 			var sw = Stopwatch.StartNew();
 			var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
+			var isMove = move ?? false;
 
 			using var device = GetDeviceByName(deviceName);
 
@@ -156,7 +163,7 @@ namespace MediaDeviceCopier
 						}
 						string SubTargetFullPath = Path.Combine(targetFolder, SubFolder);
 						// Console.WriteLine($"SUBFULL {SubFolderFullPath} TARGETFULL: {SubTargetFullPath} TARGET:{targetFolder}  SUB:{SubFolder}");
-						CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern);
+						CopyFiles(mode, deviceName, SubFolderFullPath, SubTargetFullPath, skipExisting, recursive, FilterSubFolderPattern, move);
 					}
 				}
 			}
@@ -179,7 +186,7 @@ namespace MediaDeviceCopier
 				var targetFilePath = Path.Combine(targetFolder, Path.GetFileName(sourceFilePath));
 				Console.Write($"{sourceFilePath}...");
 
-				var fileCopyResultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ??= true);
+				var fileCopyResultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ??= true, isMove);
 				if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
 				{
 					bytesNotCopied += fileCopyResultInfo.Length;
@@ -188,10 +195,6 @@ namespace MediaDeviceCopier
 				{
 					bytesCopied += fileCopyResultInfo.Length;
 				}
-
-				// erase the word "copying" => removed already on Console.Write($"{sourceFilePath}...copying"); 12 line above
-				// Commented out this raises an exception on long paths with line wrap
-				// Console.CursorLeft -= 7;
 
 				WriteCopyResult(fileCopyResultInfo);
 			}
@@ -235,13 +238,14 @@ namespace MediaDeviceCopier
 
 		private static void WriteCopyResult(FileCopyResultInfo fileCopyResultInfo)
 		{
+			string suffix = fileCopyResultInfo.SourceDeleted ? " (moved)" : string.Empty;
 			if (fileCopyResultInfo.CopyStatus == FileCopyStatus.Copied)
 			{
-				Console.WriteLine("copied  ");
+				Console.WriteLine($"copied{suffix}");
 			}
 			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.CopiedBecauseDateOrSizeMismatch)
 			{
-				Console.WriteLine($"copied (date or size mismatch)");
+				Console.WriteLine($"copied (date or size mismatch){suffix}");
 			}
 			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
 			{

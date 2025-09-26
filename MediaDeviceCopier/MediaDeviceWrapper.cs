@@ -18,6 +18,7 @@ internal class MediaDeviceWrapper : IMediaDevice
 	public MediaFileInfo GetFileInfo(string path) => _device.GetFileInfo(path);
 	public void DownloadFile(string sourceFilePath, string targetFilePath) => _device.DownloadFile(sourceFilePath, targetFilePath);
 	public void UploadFile(string sourceFilePath, string targetFilePath) => _device.UploadFile(sourceFilePath, targetFilePath);
+	public void DeleteFile(string path) => _device.DeleteFile(path);
 	public string[] GetDirectories(string folder) => _device.GetDirectories(folder);
 	public void CreateDirectory(string folder) => _device.CreateDirectory(folder);
 	public bool DirectoryExists(string folder) => _device.DirectoryExists(folder);
