@@ -115,7 +115,7 @@ The tool reports its version information using `--version` or `-h` flags.
 
 ```
 PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe --version
-1.1.0
+0.5.0
 ```
 
 ```
