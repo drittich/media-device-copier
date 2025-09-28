@@ -187,7 +187,8 @@ namespace MediaDeviceCopier
 				Console.Write($"{sourceFilePath}...");
 
 				var fileCopyResultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ??= true, isMove);
-				if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
+				if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists ||
+					fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseUnsupported)
 				{
 					bytesNotCopied += fileCopyResultInfo.Length;
 				}
@@ -250,6 +251,10 @@ namespace MediaDeviceCopier
 			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists)
 			{
 				Console.WriteLine($"skipped (already exists)");
+			}
+			else if (fileCopyResultInfo.CopyStatus == FileCopyStatus.SkippedBecauseUnsupported)
+			{
+				Console.WriteLine($"skipped (unsupported file type)");
 			}
 		}
 

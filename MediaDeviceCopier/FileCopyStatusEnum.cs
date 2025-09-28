@@ -4,6 +4,7 @@
 	{
 		Copied,
 		CopiedBecauseDateOrSizeMismatch,
-		SkippedBecauseAlreadyExists
+		SkippedBecauseAlreadyExists,
+		SkippedBecauseUnsupported
 	}
 }
