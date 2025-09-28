@@ -7,9 +7,11 @@ using System.Threading.Tasks;
 
 namespace MediaDeviceCopier
 {
-    internal class Program
+    public class Program
     {
-        static async Task<int> Main(string[] args)
+        internal const string Version = "1.1.0";
+
+        public static async Task<int> Main(string[] args)
         {
             var rootCommand = SetupCommandHandler();
             return await rootCommand.InvokeAsync(args);
@@ -82,7 +84,7 @@ namespace MediaDeviceCopier
             });
 
             // create commands
-            var rootCommand = new RootCommand("MediaDeviceCopier");
+            var rootCommand = new RootCommand($"MediaDeviceCopier v{Version}");
 
             var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
             listDevicesCommand.AddAlias("l");
@@ -313,6 +315,11 @@ namespace MediaDeviceCopier
             int place = Convert.ToInt32(System.Math.Floor(System.Math.Log(bytes, 1024)));
             double num = System.Math.Round(bytes / System.Math.Pow(1024, place), 1);
             return (System.Math.Sign(longByteCount) * num).ToString() + suf[place];
+        }
+
+        private static string PrintVersion()
+        {
+            return Version;
         }
     }
 }
