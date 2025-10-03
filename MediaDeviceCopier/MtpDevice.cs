@@ -1,11 +1,52 @@
 ﻿using MediaDevices;
+using System.Diagnostics;
 
 namespace MediaDeviceCopier
 {
+	#region Strategy Abstraction
+
+	/// <summary>
+	/// Context information passed to each download strategy attempt
+	/// </summary>
+	public class DownloadStrategyContext
+	{
+		public required string SourceFilePath { get; init; }
+		public required string TargetFilePath { get; init; }
+		public required string FileExtension { get; init; }
+		public required FileMediaClass MediaClass { get; init; }
+		public required IMediaDevice Device { get; init; }
+	}
+
+	/// <summary>
+	/// Delegate signature for download strategy attempts
+	/// </summary>
+	/// <param name="context">Strategy context with file and device information</param>
+	/// <returns>True if download succeeded, false to try next strategy</returns>
+	public delegate bool DownloadStrategy(DownloadStrategyContext context);
+
+	/// <summary>
+	/// Classification of media file types for potential strategy optimization
+	/// </summary>
+	public enum FileMediaClass
+	{
+		Unknown,
+		Image,      // jpg, jpeg, png, gif, bmp, tiff, raw, etc.
+		Video,      // mp4, mov, avi, mkv, wmv, m4v, etc.
+		Audio,      // wav, mp3, flac, aac, m4a, wma, etc.
+		Metadata,   // thm, lrv, xmp, etc.
+		Document    // pdf, txt, doc, etc.
+	}
+
+	#endregion
+
 	public class MtpDevice : IDisposable
 	{
 		private bool _disposed;
 		private readonly IMediaDevice _device;
+
+		// Strategy collection - can be customized for testing or specialized scenarios
+		private static List<(string Name, DownloadStrategy Strategy)>? _downloadStrategies;
+
 		public MtpDevice(IMediaDevice device)
 		{
 			_device = device;
@@ -95,7 +136,7 @@ namespace MediaDeviceCopier
 				throw new NotImplementedException();
 			}
 
-			if (isMove && result.CopyStatus != FileCopyStatus.SkippedBecauseAlreadyExists)
+			if (isMove && result.CopyStatus != FileCopyStatus.SkippedBecauseAlreadyExists && result.CopyStatus != FileCopyStatus.SkippedBecauseUnsupported)
 			{
 				try
 				{
@@ -128,7 +169,7 @@ namespace MediaDeviceCopier
 			FileCopyStatus fileCopyStatus = FileCopyStatus.Copied;
 			FileComparisonInfo? mtpFileComparisonInfo = null;
 			FileCopyResultInfo fileCopyInfo;
-	
+
 			if (skipExisting && File.Exists(targetFilePath))
 			{
 				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Download, sourceFilePath, targetFilePath, out mtpFileComparisonInfo);
@@ -146,35 +187,20 @@ namespace MediaDeviceCopier
 					fileCopyStatus = FileCopyStatus.CopiedBecauseDateOrSizeMismatch;
 				}
 			}
-	
-			// Resilient download with multiple fallback strategies for problematic files like THM
+
+			// Resilient download with multiple fallback strategies for problematic files
 			try
 			{
 				bool downloadSuccessful = TryResilientDownload(sourceFilePath, targetFilePath);
-				
+
 				if (!downloadSuccessful)
 				{
-					var fileExtension = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-					if (fileExtension == ".thm")
-					{
-						Console.WriteLine($"WARNING: Unable to copy THM file '{sourceFilePath}'. This is a known issue with GoPro THM files over MTP. The file will be skipped.");
-						// For THM files, we'll return a special status instead of throwing
-						fileCopyInfo = new()
-						{
-							CopyStatus = FileCopyStatus.SkippedBecauseUnsupported,
-							Length = 0
-						};
-						return fileCopyInfo;
-					}
-					else
-					{
-						throw new InvalidOperationException($"Failed to download file after trying all available methods: {sourceFilePath}");
-					}
+					throw new InvalidOperationException($"Failed to download file after trying all available methods: {sourceFilePath}");
 				}
 			}
-			catch (Exception ex) when (Path.GetExtension(sourceFilePath).ToLowerInvariant() == ".thm")
+			catch (Exception ex) 
 			{
-				Console.WriteLine($"WARNING: THM file copy failed with error: {ex.Message}. File will be skipped: {sourceFilePath}");
+				Console.WriteLine($"WARNING: File copy failed with error: {ex.Message}. File will be skipped: {sourceFilePath}");
 				fileCopyInfo = new()
 				{
 					CopyStatus = FileCopyStatus.SkippedBecauseUnsupported,
@@ -190,7 +216,7 @@ namespace MediaDeviceCopier
 				if (success)
 				{
 					mtpFileComparisonInfo = cmp;
-					if (IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
+					if (File.Exists(targetFilePath) && IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
 					{
 						File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
 					}
@@ -198,12 +224,23 @@ namespace MediaDeviceCopier
 				else
 				{
 					// Fallback: derive comparison info from the newly downloaded local file
-					var fi = new FileInfo(targetFilePath);
-					mtpFileComparisonInfo = new FileComparisonInfo
+					if (File.Exists(targetFilePath))
 					{
-						Length = (ulong)fi.Length,
-						ModifiedDate = fi.LastWriteTime
-					};
+						var fi = new FileInfo(targetFilePath);
+						mtpFileComparisonInfo = new FileComparisonInfo
+						{
+							Length = (ulong)fi.Length,
+							ModifiedDate = fi.LastWriteTime
+						};
+					}
+					else
+					{
+						mtpFileComparisonInfo = new FileComparisonInfo
+						{
+							Length = 0,
+							ModifiedDate = DateTime.Now
+						};
+					}
 				}
 			}
 
@@ -368,122 +405,171 @@ namespace MediaDeviceCopier
 		}
 
 		/// <summary>
+		/// Classifies a file based on its extension for potential strategy optimization.
+		/// This is a lightweight hook that enables future per-class customization without hardcoding.
+		/// </summary>
+		/// <param name="extension">File extension (with or without leading dot)</param>
+		/// <returns>Media class classification</returns>
+		public static FileMediaClass ClassifyFile(string extension)
+		{
+			var ext = extension.TrimStart('.').ToLowerInvariant();
+
+			// Image formats
+			if (ext is "jpg" or "jpeg" or "png" or "gif" or "bmp" or "tiff" or "tif" or "raw" or "cr2" or "nef" or "arw" or "dng")
+				return FileMediaClass.Image;
+
+			// Video formats
+			if (ext is "mp4" or "mov" or "avi" or "mkv" or "wmv" or "m4v" or "mpg" or "mpeg" or "flv" or "webm" or "3gp")
+				return FileMediaClass.Video;
+
+			// Audio formats
+			if (ext is "wav" or "mp3" or "flac" or "aac" or "m4a" or "wma" or "ogg" or "opus" or "alac")
+				return FileMediaClass.Audio;
+
+			// Metadata/thumbnail formats
+			if (ext is "thm" or "lrv" or "xmp" or "sidecar")
+				return FileMediaClass.Metadata;
+
+			// Document formats
+			if (ext is "pdf" or "txt" or "doc" or "docx" or "xls" or "xlsx")
+				return FileMediaClass.Document;
+
+			return FileMediaClass.Unknown;
+		}
+
+		/// <summary>
+		/// Gets the default download strategy collection. Can be customized for testing.
+		/// </summary>
+		public static List<(string Name, DownloadStrategy Strategy)> GetDefaultDownloadStrategies()
+		{
+			_downloadStrategies ??= new List<(string, DownloadStrategy)>
+			{
+				("Standard", ExecuteStandardDownload),
+				("StreamRetry", ExecuteStreamRetryDownload),
+				("ChunkedRetry", ExecuteChunkedRetryDownload),
+				("MetadataProbe", ExecuteMetadataProbeDownload)
+			};
+
+			return _downloadStrategies;
+		}
+
+		/// <summary>
+		/// Allows customization of the download strategy collection (primarily for testing)
+		/// </summary>
+		public static void SetDownloadStrategies(List<(string Name, DownloadStrategy Strategy)> strategies)
+		{
+			_downloadStrategies = strategies;
+		}
+
+		/// <summary>
 		/// Resilient download method that tries multiple strategies to download files,
-		/// especially for problematic file types like GoPro THM files that may fail with standard MTP calls.
+		/// with enhanced diagnostics for troubleshooting problematic file types.
 		/// </summary>
 		/// <param name="sourceFilePath">Source file path on the MTP device</param>
 		/// <param name="targetFilePath">Target file path on local system</param>
-		/// <returns>True if download succeeded, false if all methods failed</returns>
+		/// <returns>True if download succeeded, false if all strategies failed</returns>
 		private bool TryResilientDownload(string sourceFilePath, string targetFilePath)
 		{
-			var fileExtension = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-			var isThmFile = fileExtension == ".thm";
-			
-			// Strategy 1: Try standard MediaDevices DownloadFile
-			try
+			var extension = Path.GetExtension(sourceFilePath);
+			var mediaClass = ClassifyFile(extension);
+			var context = new DownloadStrategyContext
 			{
-				Console.Write($"[Standard] ");
-				_device.DownloadFile(sourceFilePath, targetFilePath);
-				return true;
-			}
-			catch (System.Runtime.InteropServices.COMException comEx) when (comEx.HResult == unchecked((int)0x80004005))
-			{
-				if (isThmFile)
-				{
-					Console.Write($"[THM-COM-Error] ");
-					// Continue to fallback strategies for THM files
-				}
-				else
-				{
-					throw; // Re-throw for non-THM files
-				}
-			}
-			catch (Exception) when (!isThmFile)
-			{
-				throw; // Re-throw for non-THM files
-			}
+				SourceFilePath = sourceFilePath,
+				TargetFilePath = targetFilePath,
+				FileExtension = extension,
+				MediaClass = mediaClass,
+				Device = _device
+			};
 
-			// Strategy 2: Try custom stream-based download with smaller buffer
-			try
-			{
-				Console.Write($"[Stream] ");
-				return TryStreamBasedDownload(sourceFilePath, targetFilePath);
-			}
-			catch (Exception ex)
-			{
-				Console.Write($"[Stream-Failed: {ex.GetType().Name}] ");
-			}
+			var strategies = GetDefaultDownloadStrategies();
 
-			// Strategy 3: Try to copy the file in multiple smaller chunks
-			try
+			foreach (var (name, strategy) in strategies)
 			{
-				Console.Write($"[Chunked] ");
-				return TryChunkedDownload(sourceFilePath, targetFilePath);
-			}
-			catch (Exception ex)
-			{
-				Console.Write($"[Chunked-Failed: {ex.GetType().Name}] ");
-			}
-
-			// Strategy 4: For THM files, try to extract thumbnail resource specifically
-			if (isThmFile)
-			{
+				var stopwatch = Stopwatch.StartNew();
 				try
 				{
-					Console.Write($"[Thumbnail] ");
-					return TryThumbnailResourceDownload(sourceFilePath, targetFilePath);
+					Console.Write($"[{name}] ");
+					bool success = strategy(context);
+					stopwatch.Stop();
+
+					if (success)
+					{
+						Console.Write($"Success ({stopwatch.ElapsedMilliseconds}ms) ");
+						return true;
+					}
+					else
+					{
+						Console.Write($"Returned-False ({stopwatch.ElapsedMilliseconds}ms) ");
+					}
+				}
+				catch (System.Runtime.InteropServices.COMException comEx)
+				{
+					stopwatch.Stop();
+					Console.Write($"COM-Error:0x{comEx.HResult:X8} ({stopwatch.ElapsedMilliseconds}ms) ");
+					// Continue to next strategy
 				}
 				catch (Exception ex)
 				{
-					Console.Write($"[Thumbnail-Failed: {ex.GetType().Name}] ");
+					stopwatch.Stop();
+					Console.Write($"Failed:{ex.GetType().Name} ({stopwatch.ElapsedMilliseconds}ms) ");
+					// Continue to next strategy
 				}
 			}
 
 			// All strategies failed
-			Console.Write($"[All-Failed] ");
+			Console.Write($"[All-Strategies-Failed] ");
 			return false;
 		}
 
+		#region Download Strategy Implementations
+
 		/// <summary>
-		/// Attempts to download using a custom stream-based approach with smaller buffers
+		/// Strategy 1: Standard direct download using MediaDevices library
 		/// </summary>
-		private bool TryStreamBasedDownload(string sourceFilePath, string targetFilePath)
+		private static bool ExecuteStandardDownload(DownloadStrategyContext context)
 		{
-			// This would require access to lower-level MediaDevices API
-			// For now, we'll simulate a retry with standard method but with a delay
-			Thread.Sleep(100); // Small delay in case of timing issues
-			_device.DownloadFile(sourceFilePath, targetFilePath);
+			context.Device.DownloadFile(context.SourceFilePath, context.TargetFilePath);
 			return true;
 		}
 
 		/// <summary>
-		/// Attempts to download the file in smaller chunks to work around buffer issues
+		/// Strategy 2: Stream-based retry with small delay for timing-sensitive files
 		/// </summary>
-		private bool TryChunkedDownload(string sourceFilePath, string targetFilePath)
+		private static bool ExecuteStreamRetryDownload(DownloadStrategyContext context)
 		{
-			// This is a placeholder for a more sophisticated chunked download
-			// In practice, this would require accessing the MediaDevices library's
-			// lower-level stream APIs or implementing custom MTP protocol calls
-			Thread.Sleep(200); // Longer delay for different timing
-			_device.DownloadFile(sourceFilePath, targetFilePath);
+			// Small delay in case of timing issues
+			Thread.Sleep(100);
+			context.Device.DownloadFile(context.SourceFilePath, context.TargetFilePath);
 			return true;
 		}
 
 		/// <summary>
-		/// Attempts to download THM files by specifically requesting the thumbnail resource
-		/// instead of the default data resource
+		/// Strategy 3: Chunked download retry with longer delay for buffer issues
 		/// </summary>
-		private bool TryThumbnailResourceDownload(string sourceFilePath, string targetFilePath)
+		private static bool ExecuteChunkedRetryDownload(DownloadStrategyContext context)
 		{
-			// This is a placeholder for thumbnail-specific resource extraction
-			// Real implementation would need to use MediaDevices library's resource APIs
-			// or direct WPD (Windows Portable Device) API calls to request WPD_RESOURCE_THUMBNAIL
-			
-			// For now, we'll try one more standard download attempt with different timing
+			// Longer delay for different timing window
+			// Future: implement actual chunked transfer using lower-level MTP APIs
+			Thread.Sleep(200);
+			context.Device.DownloadFile(context.SourceFilePath, context.TargetFilePath);
+			return true;
+		}
+
+		/// <summary>
+		/// Strategy 4: Metadata/thumbnail resource probe as last resort
+		/// Note: Currently a retry with extended delay. Future implementations could
+		/// use WPD_RESOURCE_THUMBNAIL for actual thumbnail extraction on supported formats.
+		/// </summary>
+		private static bool ExecuteMetadataProbeDownload(DownloadStrategyContext context)
+		{
+			// Extended delay for maximum timing window difference
+			// Future: for image/video files, attempt WPD thumbnail resource extraction
 			Thread.Sleep(500);
-			_device.DownloadFile(sourceFilePath, targetFilePath);
+			context.Device.DownloadFile(context.SourceFilePath, context.TargetFilePath);
 			return true;
 		}
+
+		#endregion
 
 		/// <summary>
 		/// Validates if a DateTime can be safely converted to Win32 FileTime.

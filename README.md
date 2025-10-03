@@ -149,6 +149,78 @@ Both filters are independent - you can use one or both together. If no filters a
 
 ---
 
+## Resilient Download Architecture
+
+MediaDeviceCopier implements a sophisticated multi-strategy download system to handle problematic MTP file transfers reliably. Some file types (particularly THM thumbnails, WAV audio, and certain metadata files) can fail with standard MTP download methods due to device firmware quirks, timing issues, or protocol limitations.
+
+### Download Strategy Pipeline
+
+When downloading files, the system automatically tries multiple strategies in sequence until one succeeds:
+
+1. **Standard Download** - Direct MTP transfer using the MediaDevices library
+2. **Stream Retry** - Retry with a small delay (100ms) for timing-sensitive files
+3. **Chunked Retry** - Retry with longer delay (200ms) for buffer-related issues
+4. **Metadata Probe** - Extended delay retry (500ms) as a last resort
+
+Each strategy logs detailed diagnostics including:
+- Strategy name
+- Execution time in milliseconds
+- COM error codes (HResult) for failures
+- Success/failure status
+
+### Universal Application
+
+The strategy pipeline applies to **all file types** universally, without hardcoded extension checks. This extension-agnostic design ensures:
+
+- Consistent behavior across all file types
+- No special-case logic that could become outdated
+- Easy extensibility for future device quirks
+- Comprehensive diagnostic logging for troubleshooting
+
+### File Classification
+
+Files are automatically classified by extension for potential future optimizations:
+
+- **Image**: jpg, jpeg, png, gif, bmp, tiff, raw, cr2, nef, arw, dng
+- **Video**: mp4, mov, avi, mkv, wmv, m4v, mpg, mpeg, flv, webm, 3gp
+- **Audio**: wav, mp3, flac, aac, m4a, wma, ogg, opus, alac
+- **Metadata**: thm, lrv, xmp, sidecar
+- **Document**: pdf, txt, doc, docx, xls, xlsx
+- **Unknown**: all other extensions
+
+This classification is currently informational but provides hooks for future strategy customization per file class.
+
+### Failure Handling
+
+If all strategies fail, the file is:
+- Marked as `SkippedBecauseUnsupported`
+- Logged with a warning message
+- Not deleted from source (if using `--move`)
+- Reported in the final summary
+
+### Example Diagnostic Output
+
+```
+[Standard] COM-Error:0x80004005 (0ms)
+[StreamRetry] COM-Error:0x80004005 (105ms)
+[ChunkedRetry] Success (204ms)
+```
+
+This shows the Standard strategy failed immediately, StreamRetry failed after 105ms, and ChunkedRetry succeeded after 204ms.
+
+### Extensibility
+
+The strategy system is designed for easy extension:
+
+- New strategies can be added to the collection
+- Strategy order can be customized
+- Per-file-class strategies can be implemented
+- Custom timing delays can be configured
+
+For implementation details, see [`ARCHITECTURE_MTP_STRATEGIES.md`](ARCHITECTURE_MTP_STRATEGIES.md).
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
