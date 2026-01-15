@@ -11,20 +11,31 @@ Use it to:
 
 ## Table of contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [Commands](#commands)
-  - [list-devices](#list-devices)
-  - [list-files](#list-files)
-  - [download-files](#download-files)
-  - [upload-files](#upload-files)
-- [Filtering](#filtering)
-- [Common behaviors and defaults](#common-behaviors-and-defaults)
-- [Troubleshooting](#troubleshooting)
-- [Architecture (resilient downloads)](#architecture-resilient-downloads)
-- [License](#license)
-- [Contributing](#contributing)
+- [Media Device Copier](#media-device-copier)
+  - [Table of contents](#table-of-contents)
+  - [Features](#features)
+  - [Requirements](#requirements)
+  - [Quick start](#quick-start)
+    - [1) Show help](#1-show-help)
+    - [2) List devices](#2-list-devices)
+    - [3) List files in a device folder](#3-list-files-in-a-device-folder)
+    - [4) Download from device to PC](#4-download-from-device-to-pc)
+    - [5) Upload from PC to device](#5-upload-from-pc-to-device)
+  - [Commands](#commands)
+    - [list-devices](#list-devices)
+    - [list-files](#list-files)
+    - [download-files](#download-files)
+    - [upload-files](#upload-files)
+  - [Filtering](#filtering)
+  - [Common behaviors and defaults](#common-behaviors-and-defaults)
+  - [Troubleshooting](#troubleshooting)
+    - [Device not found](#device-not-found)
+    - [Folder not found](#folder-not-found)
+    - [Invalid regex](#invalid-regex)
+    - [Unsupported file types](#unsupported-file-types)
+  - [Architecture (resilient downloads)](#architecture-resilient-downloads)
+  - [License](#license)
+  - [Contributing](#contributing)
 
 ---
 
@@ -43,7 +54,7 @@ Use it to:
 
 ## Requirements
 
-- Windows (the app targets `net9.0-windows`).
+- Windows (the app targets `net10.0-windows`).
 - An MTP-capable device connected and unlocked (phones often require you to unlock and approve the connection).
 
 ---
