@@ -1,5 +1,6 @@
 ﻿using MediaDevices;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace MediaDeviceCopier
 {
@@ -470,6 +471,8 @@ namespace MediaDeviceCopier
 		/// <returns>True if download succeeded, false if all strategies failed</returns>
 		private bool TryResilientDownload(string sourceFilePath, string targetFilePath)
 		{
+			var opId = Guid.NewGuid().ToString("N").Substring(0, 8);
+
 			var extension = Path.GetExtension(sourceFilePath);
 			var mediaClass = ClassifyFile(extension);
 			var context = new DownloadStrategyContext
@@ -483,12 +486,32 @@ namespace MediaDeviceCopier
 
 			var strategies = GetDefaultDownloadStrategies();
 
-			foreach (var (name, strategy) in strategies)
+			long preExistingLocalBytes = -1;
+			try
 			{
+				if (File.Exists(targetFilePath))
+				{
+					preExistingLocalBytes = new FileInfo(targetFilePath).Length;
+				}
+			}
+			catch
+			{
+				preExistingLocalBytes = -1;
+			}
+
+			for (int i = 0; i < strategies.Count; i++)
+			{
+				var (name, strategy) = strategies[i];
+				var attempt = i + 1;
+
 				var stopwatch = Stopwatch.StartNew();
 				try
 				{
-					Console.Write($"[{name}] ");
+					Console.Write($"[op:{opId}] [{attempt}/{strategies.Count}] [{name}] ");
+					Console.Write($"Connected={_device.IsConnected} ");
+					if (preExistingLocalBytes >= 0)
+						Console.Write($"LocalBytes={preExistingLocalBytes} ");
+
 					bool success = strategy(context);
 					stopwatch.Stop();
 
@@ -502,22 +525,25 @@ namespace MediaDeviceCopier
 						Console.Write($"Returned-False ({stopwatch.ElapsedMilliseconds}ms) ");
 					}
 				}
-				catch (System.Runtime.InteropServices.COMException comEx)
+				catch (COMException comEx)
 				{
 					stopwatch.Stop();
 					Console.Write($"COM-Error:0x{comEx.HResult:X8} ({stopwatch.ElapsedMilliseconds}ms) ");
+					Console.Write($"Msg=\"{comEx.Message}\" ");
 					// Continue to next strategy
 				}
 				catch (Exception ex)
 				{
 					stopwatch.Stop();
-					Console.Write($"Failed:{ex.GetType().Name} ({stopwatch.ElapsedMilliseconds}ms) ");
+					var hr = Marshal.GetHRForException(ex);
+					Console.Write($"Failed:{ex.GetType().Name} HR=0x{hr:X8} ({stopwatch.ElapsedMilliseconds}ms) ");
+					Console.Write($"Msg=\"{ex.Message}\" ");
 					// Continue to next strategy
 				}
 			}
 
 			// All strategies failed
-			Console.Write($"[All-Strategies-Failed] ");
+			Console.Write($"[op:{opId}] [All-Strategies-Failed] ");
 			return false;
 		}
 
