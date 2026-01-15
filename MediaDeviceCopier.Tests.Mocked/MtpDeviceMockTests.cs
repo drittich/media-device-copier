@@ -12,10 +12,19 @@ public class MtpDeviceMockTests
 	[Fact]
 	public void DeviceFactory_ReturnsMock()
 	{
-		MtpDevice.DeviceFactory = () => new[] { (IMediaDevice)new MockMediaDevice() };
-		var devices = MtpDevice.GetAll();
-		Assert.Single(devices);
-		Assert.Equal("MockDevice", devices[0].FriendlyName);
+		var originalFactory = MtpDevice.DeviceFactory;
+		try
+		{
+			MtpDevice.DeviceFactory = () => new[] { (IMediaDevice)new MockMediaDevice() };
+			var devices = MtpDevice.GetAll();
+			Assert.Single(devices);
+			Assert.Equal("MockDevice", devices[0].FriendlyName);
+		}
+		finally
+		{
+			// Reset static state for other tests (also clears cached device list)
+			MtpDevice.DeviceFactory = originalFactory;
+		}
 	}
 
 	[Theory]

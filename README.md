@@ -30,11 +30,32 @@ Options:
 
 Commands:
   l, list-devices    List the available MTP devices.
+  lf, list-files     List files in a device folder.
   u, upload-files    Upload files to the MTP device.
   d, download-files  Download files from the MTP device.
 ```
 
 Use the `list-devices` command to determine the device name you need to pass for the following operations.
+
+Listing files options:
+
+```powershell
+MediaDeviceCopier.exe list-files -n "<Device>" -s "<DeviceFolder>" [-f "<regex>"] [--full-path]
+```
+
+Output modes:
+- Default: prints file names only (one per line).
+- `--full-path`: prints the full device path for each file.
+
+Examples:
+
+```powershell
+# List all files in a device folder
+MediaDeviceCopier.exe list-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE"
+
+# List only JPEG files and print full device paths (alias: lf)
+MediaDeviceCopier.exe lf -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -f "\.(jpg|jpeg)$" --full-path
+```
 
 Downloading files options:
 

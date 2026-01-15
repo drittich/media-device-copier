@@ -80,12 +80,24 @@ namespace MediaDeviceCopier
 				}
 			});
 
+			var fullPathOption = new Option<bool>(
+				new[] { "--full-path" },
+				description: "Print full device paths instead of file names.");
+
 			// create commands
 			var rootCommand = new RootCommand($"MediaDeviceCopier v{Version}");
 
 			var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
 			listDevicesCommand.AddAlias("l");
 			rootCommand.AddCommand(listDevicesCommand);
+
+			var listFilesCommand = new Command("list-files", "List files in a device folder.");
+			listFilesCommand.AddAlias("lf");
+			listFilesCommand.AddOption(deviceNameOption);
+			listFilesCommand.AddOption(sourceFolderOption);
+			listFilesCommand.AddOption(filterFilesOption);
+			listFilesCommand.AddOption(fullPathOption);
+			rootCommand.AddCommand(listFilesCommand);
 
 			var uploadCommand = new Command("upload-files", "Upload files to the MTP device.");
 			uploadCommand.AddAlias("u");
@@ -113,6 +125,13 @@ namespace MediaDeviceCopier
 
 			// set handlers
 			listDevicesCommand.SetHandler(ListDevices);
+			listFilesCommand.SetHandler(
+				(string deviceName, string sourceFolder, string? filterFilePattern, bool fullPath) =>
+				{
+					ListFiles(deviceName, sourceFolder, filterFilePattern, fullPath);
+				},
+				deviceNameOption, sourceFolderOption, filterFilesOption, fullPathOption
+			);
 
 			uploadCommand.SetHandler(
 				(string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, bool move, string? filterSubfolderPattern, string? filterFilePattern) =>
@@ -300,6 +319,46 @@ namespace MediaDeviceCopier
 		{
 			foreach (var device in MtpDevice.GetAll())
 				Console.WriteLine($"Device: {device.FriendlyName}");
+		}
+
+		private static void ListFiles(string deviceName, string sourceFolder, string? filterFilePattern, bool fullPath)
+		{
+			using var device = GetDeviceByName(deviceName);
+
+			string[] entries;
+			try
+			{
+				entries = device.GetFiles(sourceFolder);
+			}
+			catch (DirectoryNotFoundException ex)
+			{
+				Console.WriteLine($"[{device.FriendlyName}] {ex.Message}");
+				Environment.Exit(1);
+				return;
+			}
+
+			Regex? filterFileRegex = null;
+			if (!string.IsNullOrEmpty(filterFilePattern))
+				filterFileRegex = new Regex(filterFilePattern);
+
+			var orderedEntries = entries
+				.Select(p => new
+				{
+					Raw = p,
+					FileName = Path.GetFileName(p),
+				})
+				.Where(x => filterFileRegex == null || filterFileRegex.IsMatch(x.FileName))
+				.Select(x => new
+				{
+					x.Raw,
+					Display = fullPath ? x.Raw : x.FileName,
+				})
+				.OrderBy(x => x.Display, StringComparer.InvariantCultureIgnoreCase)
+				.ThenBy(x => x.Display, StringComparer.InvariantCulture)
+				.ThenBy(x => x.Raw, StringComparer.InvariantCultureIgnoreCase);
+
+			foreach (var entry in orderedEntries)
+				Console.WriteLine(entry.Display);
 		}
 
 		private static string BytesToString(ulong byteCount)
