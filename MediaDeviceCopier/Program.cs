@@ -11,143 +11,169 @@ namespace MediaDeviceCopier
 		public static async Task<int> Main(string[] args)
 		{
 			var rootCommand = SetupCommandHandler();
-			return await rootCommand.InvokeAsync(args);
+			return await rootCommand.Parse(args).InvokeAsync();
 		}
 
 		private static RootCommand SetupCommandHandler()
 		{
 			// create options
 			var deviceNameOption = new Option<string>(
-				new[] { "--device-name", "-n" },
-				description: "The MTP device we'll be copying files to/from.")
+				"--device-name",
+				new[] { "-n" })
 			{
-				IsRequired = true
+				Description = "The MTP device we'll be copying files to/from.",
+				Required = true
 			};
 
 			var sourceFolderOption = new Option<string>(
-				new[] { "--source-folder", "-s" },
-				description: "The folder we'll be copying files from.")
+				"--source-folder",
+				new[] { "-s" })
 			{
-				IsRequired = true
+				Description = "The folder we'll be copying files from.",
+				Required = true
 			};
 
 			var targetFolderOption = new Option<string>(
-				new[] { "--target-folder", "-t" },
-				description: "The folder we'll be copying files to.")
+				"--target-folder",
+				new[] { "-t" })
 			{
-				IsRequired = true
+				Description = "The folder we'll be copying files to.",
+				Required = true
 			};
 
 			var skipExistingFilesOption = new Option<bool?>(
-				new[] { "--skip-existing", "-se" },
-				description: "Whether to skip existing files (default: true).");
+				"--skip-existing",
+				new[] { "-se" })
+			{
+				Description = "Whether to skip existing files (default: true)."
+			};
 
 			var copyRecursiveOption = new Option<bool?>(
-				new[] { "--copy-recursive", "-r" },
-				description: "Copy folders recursively (default: false).");
+				"--copy-recursive",
+				new[] { "-r" })
+			{
+				Description = "Copy folders recursively (default: false)."
+			};
 
 			var moveOption = new Option<bool>(
-				new[] { "--move", "-mv" },
-				description: "Delete source after successful transfer (move operation).");
-
-			var filterSubfoldersOption = new Option<string>(
-				new[] { "--filter-subfolders", "-sf" },
-				description: "Optional: Include only subfolders which match the regular expression pattern (default: all).")
+				"--move",
+				new[] { "-mv" })
 			{
-				IsRequired = false
+				Description = "Delete source after successful transfer (move operation)."
 			};
-			filterSubfoldersOption.AddValidator(context =>
+
+			var filterSubfoldersOption = new Option<string?>(
+				"--filter-subfolders",
+				new[] { "-sf" })
 			{
-				if (context.Tokens.Count > 0)
+				Description = "Optional: Include only subfolders which match the regular expression pattern (default: all)."
+			};
+			filterSubfoldersOption.Validators.Add(result =>
+			{
+				if (result.Tokens.Count > 0)
 				{
-					try { _ = new Regex(context.Tokens[0].Value); }
-					catch (Exception ex) { context.ErrorMessage = $"Invalid subfolder regex pattern: {ex.Message}"; }
+					try { _ = new Regex(result.Tokens[0].Value); }
+					catch (Exception ex) { result.AddError($"Invalid subfolder regex pattern: {ex.Message}"); }
 				}
 			});
 
-			var filterFilesOption = new Option<string>(
-				new[] { "--filter-files", "-f" },
-				description: "Optional: Include only files which match the regular expression pattern (default: all).")
+			var filterFilesOption = new Option<string?>(
+				"--filter-files",
+				new[] { "-f" })
 			{
-				IsRequired = false
+				Description = "Optional: Include only files which match the regular expression pattern (default: all)."
 			};
-			filterFilesOption.AddValidator(context =>
+			filterFilesOption.Validators.Add(result =>
 			{
-				if (context.Tokens.Count > 0)
+				if (result.Tokens.Count > 0)
 				{
-					try { _ = new Regex(context.Tokens[0].Value); }
-					catch (Exception ex) { context.ErrorMessage = $"Invalid file regex pattern: {ex.Message}"; }
+					try { _ = new Regex(result.Tokens[0].Value); }
+					catch (Exception ex) { result.AddError($"Invalid file regex pattern: {ex.Message}"); }
 				}
 			});
 
 			var fullPathOption = new Option<bool>(
-				new[] { "--full-path" },
-				description: "Print full device paths instead of file names.");
+				"--full-path",
+				Array.Empty<string>())
+			{
+				Description = "Print full device paths instead of file names."
+			};
 
 			// create commands
 			var rootCommand = new RootCommand($"MediaDeviceCopier v{Version}");
 
 			var listDevicesCommand = new Command("list-devices", "List the available MTP devices.");
-			listDevicesCommand.AddAlias("l");
-			rootCommand.AddCommand(listDevicesCommand);
+			listDevicesCommand.Aliases.Add("l");
+			rootCommand.Add(listDevicesCommand);
 
 			var listFilesCommand = new Command("list-files", "List files in a device folder.");
-			listFilesCommand.AddAlias("lf");
-			listFilesCommand.AddOption(deviceNameOption);
-			listFilesCommand.AddOption(sourceFolderOption);
-			listFilesCommand.AddOption(filterFilesOption);
-			listFilesCommand.AddOption(fullPathOption);
-			rootCommand.AddCommand(listFilesCommand);
+			listFilesCommand.Aliases.Add("lf");
+			listFilesCommand.Add(deviceNameOption);
+			listFilesCommand.Add(sourceFolderOption);
+			listFilesCommand.Add(filterFilesOption);
+			listFilesCommand.Add(fullPathOption);
+			rootCommand.Add(listFilesCommand);
 
 			var uploadCommand = new Command("upload-files", "Upload files to the MTP device.");
-			uploadCommand.AddAlias("u");
-			uploadCommand.AddOption(deviceNameOption);
-			uploadCommand.AddOption(sourceFolderOption);
-			uploadCommand.AddOption(targetFolderOption);
-			uploadCommand.AddOption(skipExistingFilesOption);
-			uploadCommand.AddOption(copyRecursiveOption);
-			uploadCommand.AddOption(moveOption);
-			uploadCommand.AddOption(filterSubfoldersOption);
-			uploadCommand.AddOption(filterFilesOption);
-			rootCommand.AddCommand(uploadCommand);
+			uploadCommand.Aliases.Add("u");
+			uploadCommand.Add(deviceNameOption);
+			uploadCommand.Add(sourceFolderOption);
+			uploadCommand.Add(targetFolderOption);
+			uploadCommand.Add(skipExistingFilesOption);
+			uploadCommand.Add(copyRecursiveOption);
+			uploadCommand.Add(moveOption);
+			uploadCommand.Add(filterSubfoldersOption);
+			uploadCommand.Add(filterFilesOption);
+			rootCommand.Add(uploadCommand);
 
 			var downloadCommand = new Command("download-files", "Download files from the MTP device.");
-			downloadCommand.AddAlias("d");
-			downloadCommand.AddOption(deviceNameOption);
-			downloadCommand.AddOption(sourceFolderOption);
-			downloadCommand.AddOption(targetFolderOption);
-			downloadCommand.AddOption(skipExistingFilesOption);
-			downloadCommand.AddOption(copyRecursiveOption);
-			downloadCommand.AddOption(moveOption);
-			downloadCommand.AddOption(filterSubfoldersOption);
-			downloadCommand.AddOption(filterFilesOption);
-			rootCommand.AddCommand(downloadCommand);
+			downloadCommand.Aliases.Add("d");
+			downloadCommand.Add(deviceNameOption);
+			downloadCommand.Add(sourceFolderOption);
+			downloadCommand.Add(targetFolderOption);
+			downloadCommand.Add(skipExistingFilesOption);
+			downloadCommand.Add(copyRecursiveOption);
+			downloadCommand.Add(moveOption);
+			downloadCommand.Add(filterSubfoldersOption);
+			downloadCommand.Add(filterFilesOption);
+			rootCommand.Add(downloadCommand);
 
 			// set handlers
-			listDevicesCommand.SetHandler(ListDevices);
-			listFilesCommand.SetHandler(
-				(string deviceName, string sourceFolder, string? filterFilePattern, bool fullPath) =>
-				{
-					ListFiles(deviceName, sourceFolder, filterFilePattern, fullPath);
-				},
-				deviceNameOption, sourceFolderOption, filterFilesOption, fullPathOption
-			);
+			listDevicesCommand.SetAction(_ => ListDevices());
+			listFilesCommand.SetAction(parseResult =>
+			{
+				var deviceName = parseResult.GetRequiredValue(deviceNameOption);
+				var sourceFolder = parseResult.GetRequiredValue(sourceFolderOption);
+				var filterFilePattern = parseResult.GetValue(filterFilesOption);
+				var fullPath = parseResult.GetValue(fullPathOption);
+				ListFiles(deviceName, sourceFolder, filterFilePattern, fullPath);
+			});
 
-			uploadCommand.SetHandler(
-				(string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, bool move, string? filterSubfolderPattern, string? filterFilePattern) =>
-				{
-					CopyFiles("upload", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
-				},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, moveOption, filterSubfoldersOption, filterFilesOption
-			);
+			uploadCommand.SetAction(parseResult =>
+			{
+				var deviceName = parseResult.GetRequiredValue(deviceNameOption);
+				var sourceFolder = parseResult.GetRequiredValue(sourceFolderOption);
+				var targetFolder = parseResult.GetRequiredValue(targetFolderOption);
+				var skipExisting = parseResult.GetValue(skipExistingFilesOption);
+				var recursive = parseResult.GetValue(copyRecursiveOption);
+				var move = parseResult.GetValue(moveOption);
+				var filterSubfolderPattern = parseResult.GetValue(filterSubfoldersOption);
+				var filterFilePattern = parseResult.GetValue(filterFilesOption);
+				CopyFiles("upload", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
+			});
 
-			downloadCommand.SetHandler(
-				(string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, bool move, string? filterSubfolderPattern, string? filterFilePattern) =>
-				{
-					CopyFiles("download", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
-				},
-				deviceNameOption, sourceFolderOption, targetFolderOption, skipExistingFilesOption, copyRecursiveOption, moveOption, filterSubfoldersOption, filterFilesOption
-			);
+			downloadCommand.SetAction(parseResult =>
+			{
+				var deviceName = parseResult.GetRequiredValue(deviceNameOption);
+				var sourceFolder = parseResult.GetRequiredValue(sourceFolderOption);
+				var targetFolder = parseResult.GetRequiredValue(targetFolderOption);
+				var skipExisting = parseResult.GetValue(skipExistingFilesOption);
+				var recursive = parseResult.GetValue(copyRecursiveOption);
+				var move = parseResult.GetValue(moveOption);
+				var filterSubfolderPattern = parseResult.GetValue(filterSubfoldersOption);
+				var filterFilePattern = parseResult.GetValue(filterFilesOption);
+				CopyFiles("download", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
+			});
 
 			return rootCommand;
 		}
