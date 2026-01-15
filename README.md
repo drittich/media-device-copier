@@ -1,51 +1,128 @@
-# media-device-copier
+# Media Device Copier
+
 **Media Device Copier** is a Windows command-line utility for copying files to and from phones and other devices connected via MTP (Media Transfer Protocol).
 
-Easily list connected devices, upload files to your device, or download files from your device—all from the command line.
+Use it to:
 
+- list connected devices
+- list files on a device folder
+- download from device to PC
+- upload from PC to device
+
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+  - [list-devices](#list-devices)
+  - [list-files](#list-files)
+  - [download-files](#download-files)
+  - [upload-files](#upload-files)
+- [Filtering](#filtering)
+- [Common behaviors and defaults](#common-behaviors-and-defaults)
+- [Troubleshooting](#troubleshooting)
+- [Architecture (resilient downloads)](#architecture-resilient-downloads)
+- [License](#license)
+- [Contributing](#contributing)
 
 ---
 
 ## Features
 
-- **List devices:** See all connected MTP devices.
-- **Upload files:** Transfer files or folders to your device.
-- **Download files:** Copy files or folders from your device to your PC.
-- **Skip existing files:** Optionally avoid re-copying files.
-- **Move files:** Use `--move` to delete the source after a successful transfer (download or upload).
-- **Recursive copy:** Copy entire folder structures if needed.
-- **Subfolder and file filtering:** Use regex patterns to include only matching subfolders and files.
+- **List devices**: show all connected MTP devices (`list-devices`, alias `l`).
+- **List files**: list files in a device folder (`list-files`, alias `lf`), optionally filtered by regex and/or printed as full device paths.
+- **Upload files**: copy files/folders from your PC to the device (`upload-files`, alias `u`).
+- **Download files**: copy files/folders from the device to your PC (`download-files`, alias `d`).
+- **Skip existing files**: avoid re-copying files (default behavior).
+- **Move files**: use `--move` to delete the source after a successful transfer.
+- **Recursive copy**: copy directory trees (`--copy-recursive`).
+- **Subfolder + file filtering**: use regex patterns to include only matching subfolders and/or files.
+
+---
+
+## Requirements
+
+- Windows (the app targets `net9.0-windows`).
+- An MTP-capable device connected and unlocked (phones often require you to unlock and approve the connection).
+
+---
+
+## Quick start
+
+### 1) Show help
+
+```powershell
+MediaDeviceCopier.exe -h
 ```
 
-PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe -h
-Description:
-  MediaDeviceCopier
+### 2) List devices
 
-Usage:
-  MediaDeviceCopier [command] [options]
+```powershell
+MediaDeviceCopier.exe list-devices
+# alias
+MediaDeviceCopier.exe l
+```
+
+### 3) List files in a device folder
+
+```powershell
+MediaDeviceCopier.exe list-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE"
+
+# alias + filter to only jpeg files + print full device paths
+MediaDeviceCopier.exe lf -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -f "\.(jpg|jpeg)$" --full-path
+```
+
+### 4) Download from device to PC
+
+```powershell
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -t "D:\Photos" -r
+```
+
+### 5) Upload from PC to device
+
+```powershell
+MediaDeviceCopier.exe upload-files -n "Android Device" -s "C:\Documents" -t "Internal Storage\Documents" -r -f "\.pdf$"
+```
+
+---
+
+## Commands
+
+### list-devices
+
+Lists all available MTP devices.
+
+- **Command**: `list-devices`
+- **Alias**: `l`
+
+Example:
+
+```powershell
+MediaDeviceCopier.exe list-devices
+```
+
+---
+
+### list-files
+
+Lists files in a device folder.
+
+- **Command**: `list-files`
+- **Alias**: `lf`
 
 Options:
-  --version       Show version information
-  -?, -h, --help  Show help and usage information
 
-Commands:
-  l, list-devices    List the available MTP devices.
-  lf, list-files     List files in a device folder.
-  u, upload-files    Upload files to the MTP device.
-  d, download-files  Download files from the MTP device.
-```
+- `-n`, `--device-name` (required): the MTP device name.
+- `-s`, `--source-folder` (required): the device folder to list.
+- `-f`, `--filter-files` (optional): .NET regex to filter **by file name**.
+- `--full-path` (optional): print full device paths instead of just file names.
 
-Use the `list-devices` command to determine the device name you need to pass for the following operations.
-
-Listing files options:
+Usage:
 
 ```powershell
 MediaDeviceCopier.exe list-files -n "<Device>" -s "<DeviceFolder>" [-f "<regex>"] [--full-path]
 ```
-
-Output modes:
-- Default: prints file names only (one per line).
-- `--full-path`: prints the full device path for each file.
 
 Examples:
 
@@ -53,192 +130,148 @@ Examples:
 # List all files in a device folder
 MediaDeviceCopier.exe list-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE"
 
-# List only JPEG files and print full device paths (alias: lf)
+# List only JPEG files and print full device paths
 MediaDeviceCopier.exe lf -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -f "\.(jpg|jpeg)$" --full-path
 ```
 
-Downloading files options:
+---
 
+### download-files
+
+Downloads files from an MTP device folder to a Windows folder.
+
+- **Command**: `download-files`
+- **Alias**: `d`
+
+Required options:
+
+- `-n`, `--device-name`: the MTP device name.
+- `-s`, `--source-folder`: the device folder to copy from.
+- `-t`, `--target-folder`: the Windows folder to copy into.
+
+Common optional options:
+
+- `-se`, `--skip-existing`: whether to skip existing files (default behavior is to skip).
+- `-r`, `--copy-recursive`: recurse into subfolders (default is off).
+- `-mv`, `--move`: delete source after successful transfer.
+- `-sf`, `--filter-subfolders`: .NET regex filter for subfolder names (used during recursion).
+- `-f`, `--filter-files`: .NET regex filter for file names.
+
+Examples:
+
+```powershell
+# Copy pictures recursively and skip already-copied images
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -r
+
+# Move (download then delete from device) all videos after archiving
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -t "D:\Archive" -r --move
+
+# Copy only MP4 files from a flat folder (non-recursive)
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -t "D:\Videos" -f "\.mp4$"
+
+# Recursive copy: only subfolders starting with 2025, only JPG/PNG files
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -r -sf "^2025.*" -f "\.(jpg|png)$"
 ```
-PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe d -h
-Description:
-  Download files from the MTP device.
-
-Usage:
-  MediaDeviceCopier download-files [options]
-
-Options:
-  -n, --device-name <device-name> (REQUIRED)      The MTP device we'll be copying files to/from.
-  -s, --source-folder <source-folder> (REQUIRED)  The folder we'll be copying files from.
-  -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
-  -se, --skip-existing                            Whether to skip existing files (default: true).
-  -r, --copy-recursive                            Copy folders recursive (default: false).
-  -mv, --move                                     Delete source after successful transfer (move).
-  -sf, --filter-subfolders <filter-subfolders>  Optional: Include only subfolders which match the regular expression pattern. Default: all
-  -f, --filter-files <filter-files>  Optional: Include only files which match the regular expression pattern. Default: all
-  -?, -h, --help                                  Show help and usage information
-```
-
-Uploading files options:
-
-```
-PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe u -h
-Description:
-  Upload files to the MTP device.
-
-Usage:
-  MediaDeviceCopier upload-files [options]
-
-Options:
-  -n, --device-name <device-name> (REQUIRED)      The MTP device we'll be copying files to/from.
-  -s, --source-folder <source-folder> (REQUIRED)  The folder we'll be copying files from.
-  -t, --target-folder <target-folder> (REQUIRED)  The folder we'll be copying files to.
-  -se, --skip-existing                            Whether to skip existing files (default: true).
-  -r, --copy-recursive                            Copy folders recursive (default: false).
-  -mv, --move                                     Delete source after successful transfer (move).
-  -sf, --filter-subfolders <filter-subfolders>  Optional: Include only subfolders which match the regular expression pattern. Default: all
-  -f, --filter-files <filter-files>  Optional: Include only files which match the regular expression pattern. Default: all
-  -?, -h, --help                                  Show help and usage information
-```
-## Examples
-
-### Basic Operations
-
-Copy pictures from an iPhone recursively and skip already-copied images:
-```
-MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r
-```
-
-Move (download then delete from device) all videos after archiving:
-```
-MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -t "D:\Archive" -se -r --move
-```
-
-### Filtering Examples
-
-Copy only MP4 files from a flat folder (non-recursive):
-```
-MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM\100APPLE" -t "D:\Videos" -se -f "\.mp4$"
-```
-
-Recursive copy filtering subfolders starting with 2025 and copying only JPG/PNG files:
-```
-MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -se -r -sf "^2025.*" -f "\.(jpg|png)$"
-```
-
-Upload example using file filter to copy only PDF files:
-```
-MediaDeviceCopier.exe upload-files -n "Android Device" -s "C:\Documents" -t "Internal Storage\Documents" -se -r -f "\.pdf$"
-```
-### Version Information
-
-The tool reports its version information using `--version` or `-h` flags.
-
-```
-PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe --version
-0.5.0
-```
-
-```
-PS C:\Program Files\MediaDeviceCopier> .\MediaDeviceCopier.exe -h
-Description:
-  MediaDeviceCopier
-
-Usage:
-  MediaDeviceCopier [command] [options]
-```
-
-
-## Filtering
-
-The filtering system uses two independent regex patterns that are evaluated in this order:
-
-1. **Subfolder filters** (`-sf`) are applied during folder recursion before descending into subfolders
-2. **File filters** (`-f`) are applied to the file list within each processed folder
-
-Both filters are independent - you can use one or both together. If no filters are specified, all subfolders and files are included by default.
-
-## Deprecated
-
-**Note:** The previous `-p` / `--filter-subfolder-regex-pattern` option has been replaced by `-sf` / `--filter-subfolders`. Users must migrate to the new option.
-
-## Tips
-
-- Always use `list-devices` first to get the correct device name.
-- Use double quotes around folder names if they contain spaces.
-- Regular expressions in `-sf` and `-f` follow standard .NET regex syntax.
 
 ---
 
-## Resilient Download Architecture
+### upload-files
 
-MediaDeviceCopier implements a sophisticated multi-strategy download system to handle problematic MTP file transfers reliably. Some file types (particularly THM thumbnails, WAV audio, and certain metadata files) can fail with standard MTP download methods due to device firmware quirks, timing issues, or protocol limitations.
+Uploads files from a Windows folder to an MTP device folder.
 
-### Download Strategy Pipeline
+- **Command**: `upload-files`
+- **Alias**: `u`
 
-When downloading files, the system automatically tries multiple strategies in sequence until one succeeds:
+Required options:
 
-1. **Standard Download** - Direct MTP transfer using the MediaDevices library
-2. **Stream Retry** - Retry with a small delay (100ms) for timing-sensitive files
-3. **Chunked Retry** - Retry with longer delay (200ms) for buffer-related issues
-4. **Metadata Probe** - Extended delay retry (500ms) as a last resort
+- `-n`, `--device-name`: the MTP device name.
+- `-s`, `--source-folder`: the Windows folder to copy from.
+- `-t`, `--target-folder`: the device folder to copy into.
 
-Each strategy logs detailed diagnostics including:
-- Strategy name
-- Execution time in milliseconds
-- COM error codes (HResult) for failures
-- Success/failure status
+Common optional options:
 
-### Universal Application
+- `-se`, `--skip-existing`: whether to skip existing files (default behavior is to skip).
+- `-r`, `--copy-recursive`: recurse into subfolders (default is off).
+- `-mv`, `--move`: delete source after successful transfer.
+- `-sf`, `--filter-subfolders`: .NET regex filter for subfolder names (used during recursion).
+- `-f`, `--filter-files`: .NET regex filter for file names.
 
-The strategy pipeline applies to **all file types** universally, without hardcoded extension checks. This extension-agnostic design ensures:
+Examples:
 
-- Consistent behavior across all file types
-- No special-case logic that could become outdated
-- Easy extensibility for future device quirks
-- Comprehensive diagnostic logging for troubleshooting
-
-### File Classification
-
-Files are automatically classified by extension for potential future optimizations:
-
-- **Image**: jpg, jpeg, png, gif, bmp, tiff, raw, cr2, nef, arw, dng
-- **Video**: mp4, mov, avi, mkv, wmv, m4v, mpg, mpeg, flv, webm, 3gp
-- **Audio**: wav, mp3, flac, aac, m4a, wma, ogg, opus, alac
-- **Metadata**: thm, lrv, xmp, sidecar
-- **Document**: pdf, txt, doc, docx, xls, xlsx
-- **Unknown**: all other extensions
-
-This classification is currently informational but provides hooks for future strategy customization per file class.
-
-### Failure Handling
-
-If all strategies fail, the file is:
-- Marked as `SkippedBecauseUnsupported`
-- Logged with a warning message
-- Not deleted from source (if using `--move`)
-- Reported in the final summary
-
-### Example Diagnostic Output
-
-```
-[Standard] COM-Error:0x80004005 (0ms)
-[StreamRetry] COM-Error:0x80004005 (105ms)
-[ChunkedRetry] Success (204ms)
+```powershell
+# Upload only PDFs
+MediaDeviceCopier.exe upload-files -n "Android Device" -s "C:\Documents" -t "Internal Storage\Documents" -r -f "\.pdf$"
 ```
 
-This shows the Standard strategy failed immediately, StreamRetry failed after 105ms, and ChunkedRetry succeeded after 204ms.
+---
 
-### Extensibility
+## Filtering
 
-The strategy system is designed for easy extension:
+The filtering system uses two independent regex patterns:
 
-- New strategies can be added to the collection
-- Strategy order can be customized
-- Per-file-class strategies can be implemented
-- Custom timing delays can be configured
+1. **Subfolder filters** (`-sf`, `--filter-subfolders`) are applied during folder recursion **before** descending into subfolders.
+2. **File filters** (`-f`, `--filter-files`) are applied to the file list within each processed folder.
 
-For implementation details, see [`ARCHITECTURE_MTP_STRATEGIES.md`](ARCHITECTURE_MTP_STRATEGIES.md).
+Notes:
+
+- Regex syntax is standard **.NET regular expressions**.
+- `list-files` filters by **file name**, not the full path.
+- If no filters are specified, all folders/files are included.
+
+---
+
+## Common behaviors and defaults
+
+- **Device name discovery**: run `list-devices` first to get the exact name to pass to `-n`.
+- **Defaults**:
+  - `--skip-existing` behaves as **true** when omitted.
+  - `--copy-recursive` behaves as **false** when omitted.
+  - `--move` behaves as **false** when omitted.
+- **Folder creation**:
+  - On **download**, if the Windows target folder does not exist and `--copy-recursive` is enabled, the folder is created.
+  - On **upload**, if the device target folder does not exist and `--copy-recursive` is enabled, the folder is created.
+- **Version**:
+
+```powershell
+MediaDeviceCopier.exe --version
+```
+
+---
+
+## Troubleshooting
+
+### Device not found
+
+If you see “Device not found”, run:
+
+```powershell
+MediaDeviceCopier.exe list-devices
+```
+
+Then copy/paste the device name exactly into `-n`.
+
+### Folder not found
+
+- If a device folder path is wrong, the command will fail.
+- If a Windows folder path is wrong:
+  - with `--copy-recursive` enabled, download may create missing target folders
+  - otherwise the command exits
+
+### Invalid regex
+
+If a filter regex is invalid, the CLI will reject it. Start simple and escape backslashes correctly in your shell.
+
+### Unsupported file types
+
+Some device files may not be transferable via MTP; those are reported as skipped.
+
+---
+
+## Architecture (resilient downloads)
+
+MTP transfers can fail for certain files due to device firmware quirks, timing issues, or protocol limitations. MediaDeviceCopier uses a **multi-strategy download pipeline** and detailed diagnostics to make downloads more resilient.
+
+Implementation details are documented in [ARCHITECTURE_MTP_STRATEGIES.md](ARCHITECTURE_MTP_STRATEGIES.md).
 
 ---
 
@@ -251,13 +284,3 @@ MIT License. See [LICENSE](LICENSE) for details.
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!
-
----
-
-## Support
-
-If you encounter issues or need help, please open an issue on the repository.
-
----
-
-*Happy copying!*
