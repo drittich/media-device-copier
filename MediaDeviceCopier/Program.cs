@@ -6,7 +6,7 @@ namespace MediaDeviceCopier
 {
 	public class Program
 	{
-		internal const string Version = "0.6.0";
+		internal const string Version = "0.7.0";
 
 		public static async Task<int> Main(string[] args)
 		{

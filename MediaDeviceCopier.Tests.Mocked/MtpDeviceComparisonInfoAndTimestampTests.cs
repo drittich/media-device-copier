@@ -50,6 +50,41 @@ public class MtpDeviceComparisonInfoAndTimestampTests
 	}
 
 	[Fact]
+	public void Download_WhenOverwritingMismatchedFile_SetsDestinationTimestampToSourceTimestamp()
+	{
+		// Arrange: device file and local file have the same size but different modified dates,
+		// so the file is overwritten. The destination timestamp must be set to the source's
+		// modified date — not left as the current date/time. Without this fix MDC would
+		// repeatedly overwrite the file on every run because the timestamps would never match.
+		var mock = new MockMediaDevice();
+		var (device, _) = CreateConnected(mock);
+
+		mock.AddFolder("/device");
+		var sourcePath = "/device/overwrite_timestamp.bin";
+		var deviceBytes = new byte[] { 1, 2, 3, 4 };
+		var deviceTimestamp = new DateTime(2023, 06, 15, 10, 30, 0, DateTimeKind.Local);
+		mock.AddFile(sourcePath, deviceBytes, deviceTimestamp);
+
+		using var tempDir = new TempDirectory("MtpDeviceComparisonInfoAndTimestampTests_OverwriteTimestamp_");
+		var targetPath = Path.Combine(tempDir.Path, "overwrite_timestamp.bin");
+
+		// Local file has same size but older timestamp → triggers overwrite
+		var localBytes = new byte[] { 9, 9, 9, 9 };
+		File.WriteAllBytes(targetPath, localBytes);
+		File.SetLastWriteTime(targetPath, deviceTimestamp.AddHours(-1));
+
+		// Act
+		var result = device.CopyFile(FileCopyMode.Download, sourcePath, targetPath, skipExisting: true, isMove: false);
+
+		// Assert: file was overwritten and its timestamp matches the source device timestamp
+		Assert.Equal(FileCopyStatus.CopiedBecauseDateOrSizeMismatch, result.CopyStatus);
+		Assert.Equal(deviceBytes, File.ReadAllBytes(targetPath));
+		var actual = File.GetLastWriteTime(targetPath);
+		Assert.True(Math.Abs((actual - deviceTimestamp).TotalSeconds) <= 2,
+			$"Expected last write time within 2s of device timestamp. Device={deviceTimestamp:o}, Actual={actual:o}");
+	}
+
+	[Fact]
 	public void Upload_WhenSkipExistingAndLengthMatchesButDateDiffers_SkipsBecauseUploadComparesLengthOnly()
 	{
 		// Arrange

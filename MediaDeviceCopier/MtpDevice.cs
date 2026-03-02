@@ -216,10 +216,6 @@ namespace MediaDeviceCopier
 				if (success)
 				{
 					mtpFileComparisonInfo = cmp;
-					if (File.Exists(targetFilePath) && IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
-					{
-						File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
-					}
 				}
 				else
 				{
@@ -242,6 +238,13 @@ namespace MediaDeviceCopier
 						};
 					}
 				}
+			}
+
+			// Always set the destination file's timestamp to match the source,
+			// regardless of whether mtpFileComparisonInfo came from a mismatch check or a fresh query.
+			if (File.Exists(targetFilePath) && IsValidWin32FileTime(mtpFileComparisonInfo.ModifiedDate))
+			{
+				File.SetLastWriteTime(targetFilePath, mtpFileComparisonInfo.ModifiedDate);
 			}
 
 			fileCopyInfo = new()
