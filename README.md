@@ -162,8 +162,8 @@ Required options:
 
 Common optional options:
 
-- `-se`, `--skip-existing`: whether to skip existing files (default behavior is to skip).
-- `-r`, `--copy-recursive`: recurse into subfolders (default is off).
+- `-se`, `--skip-existing` `[true|false]`: skip files already at the destination (default: `true`). Pass `false` to overwrite existing files.
+- `-r`, `--copy-recursive` `[true|false]`: recurse into subfolders (default: `false`). The flag alone (`-r`) implies `true`.
 - `-mv`, `--move`: delete source after successful transfer.
 - `-sf`, `--filter-subfolders`: .NET regex filter for subfolder names (used during recursion).
 - `-f`, `--filter-files`: .NET regex filter for file names.
@@ -182,6 +182,9 @@ MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM
 
 # Recursive copy: only subfolders starting with 2025, only JPG/PNG files
 MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage" -t "D:\MyPictureFolder" -r -sf "^2025.*" -f "\.(jpg|png)$"
+
+# Force overwrite existing files (disable skip-existing)
+MediaDeviceCopier.exe download-files -n "Apple iPhone" -s "Internal Storage\DCIM" -t "D:\Photos" --skip-existing false
 ```
 
 ---
@@ -201,8 +204,8 @@ Required options:
 
 Common optional options:
 
-- `-se`, `--skip-existing`: whether to skip existing files (default behavior is to skip).
-- `-r`, `--copy-recursive`: recurse into subfolders (default is off).
+- `-se`, `--skip-existing` `[true|false]`: skip files already at the destination (default: `true`). Pass `false` to overwrite existing files.
+- `-r`, `--copy-recursive` `[true|false]`: recurse into subfolders (default: `false`). The flag alone (`-r`) implies `true`.
 - `-mv`, `--move`: delete source after successful transfer.
 - `-sf`, `--filter-subfolders`: .NET regex filter for subfolder names (used during recursion).
 - `-f`, `--filter-files`: .NET regex filter for file names.
@@ -238,6 +241,7 @@ Notes:
   - `--skip-existing` behaves as **true** when omitted.
   - `--copy-recursive` behaves as **false** when omitted.
   - `--move` behaves as **false** when omitted.
+- **Boolean options** (`--skip-existing`, `--copy-recursive`): can be passed as a bare flag (`-r` = true) or with an explicit value (`--skip-existing false`).
 - **Folder creation**:
   - On **download**, if the Windows target folder does not exist and `--copy-recursive` is enabled, the folder is created.
   - On **upload**, if the device target folder does not exist and `--copy-recursive` is enabled, the folder is created.

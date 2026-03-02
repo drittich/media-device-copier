@@ -45,14 +45,14 @@ namespace MediaDeviceCopier
 				"--skip-existing",
 				new[] { "-se" })
 			{
-				Description = "Whether to skip existing files (default: true)."
+				Description = "Skip files that already exist at the destination. Accepts true/false (default: true). Use '--skip-existing false' to overwrite existing files."
 			};
 
 			var copyRecursiveOption = new Option<bool?>(
 				"--copy-recursive",
 				new[] { "-r" })
 			{
-				Description = "Copy folders recursively (default: false)."
+				Description = "Recurse into subfolders. Accepts true/false (default: false). The flag alone ('-r') implies true."
 			};
 
 			var moveOption = new Option<bool>(
