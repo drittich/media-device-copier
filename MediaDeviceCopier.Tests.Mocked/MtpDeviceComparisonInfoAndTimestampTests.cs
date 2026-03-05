@@ -158,6 +158,33 @@ public class MtpDeviceComparisonInfoAndTimestampTests
 	}
 
 	[Fact]
+	public void Upload_WhenSkipExistingFalseAndTargetFileExists_OverwritesExistingFile()
+	{
+		// Arrange - This is the bug scenario: skipExisting=false with existing target file
+		var mock = new MockMediaDevice();
+		var (device, _) = CreateConnected(mock);
+
+		using var tempDir = new TempDirectory("MtpDeviceComparisonInfoAndTimestampTests_UploadOverwrite_");
+		var sourcePath = Path.Combine(tempDir.Path, "overwrite.bin");
+		var newBytes = new byte[] { 7, 8, 9, 10 };
+		File.WriteAllBytes(sourcePath, newBytes);
+
+		var targetDevicePath = "/up/overwrite.bin";
+		var existingBytes = new byte[] { 1, 2, 3, 4 };
+		mock.AddFile(targetDevicePath, existingBytes);
+
+		// Act
+		var result = device.CopyFile(FileCopyMode.Upload, sourcePath, targetDevicePath, skipExisting: false, isMove: false);
+
+		// Assert - File should be overwritten
+		Assert.Equal(FileCopyStatus.Copied, result.CopyStatus);
+		Assert.True(mock.FileExists(targetDevicePath));
+		// Verify the file was overwritten by checking InternalGetComparisonInfo
+		var info = mock.InternalGetComparisonInfo(targetDevicePath);
+		Assert.Equal((ulong)newBytes.Length, info.Length);
+	}
+
+	[Fact]
 	public void Download_WhenComparisonInfoHasValidDate_SetsTargetLastWriteTime()
 	{
 		// Arrange

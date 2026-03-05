@@ -261,7 +261,9 @@ namespace MediaDeviceCopier
 			FileComparisonInfo? mtpFileComparisonInfo = null;
 			FileCopyResultInfo fileCopyInfo;
 
-			if (skipExisting && _device.FileExists(targetFilePath))
+			var targetExists = _device.FileExists(targetFilePath);
+
+			if (skipExisting && targetExists)
 			{
 				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Upload, sourceFilePath, targetFilePath, out mtpFileComparisonInfo);
 				if (sizeAndDatesMatch)
@@ -277,6 +279,12 @@ namespace MediaDeviceCopier
 				{
 					fileCopyStatus = FileCopyStatus.CopiedBecauseDateOrSizeMismatch;
 				}
+			}
+			else if (!skipExisting && targetExists)
+			{
+				// When skipExisting is false and target exists, we must delete the existing file
+				// before uploading, as the MediaDevices library doesn't support overwriting.
+				_device.DeleteFile(targetFilePath);
 			}
 
 			_device.UploadFile(sourceFilePath, targetFilePath);
