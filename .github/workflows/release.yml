@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -46,7 +46,7 @@ jobs:
         run: dotnet publish MediaDeviceCopier/MediaDeviceCopier.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: publish/MediaDeviceCopier.exe
           generate_release_notes: true

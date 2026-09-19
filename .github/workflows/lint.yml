@@ -10,7 +10,7 @@ jobs:
   line-endings:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check line endings are normalized
         run: |
           # Check the INDEX (committed) EOL, not the working tree, so the result
