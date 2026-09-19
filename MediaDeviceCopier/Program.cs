@@ -193,9 +193,13 @@ namespace MediaDeviceCopier
         private static int RunCopy(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move)
         {
             var stats = new CopyRunStats();
+            // Open the device once for the whole run. Recursive CopyFiles calls share this
+            // instance; disposing per recursive call would tear down the cached device and
+            // break subsequent siblings after a continue-on-error.
+            using var device = GetDeviceByName(deviceName);
             try
             {
-                CopyFiles(mode, deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+                CopyFiles(mode, device, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
             }
             catch (COMException ex)
             {
@@ -216,13 +220,11 @@ namespace MediaDeviceCopier
             return 1;
         }
 
-        private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move, CopyRunStats stats)
+        private static void CopyFiles(string mode, MtpDevice device, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move, CopyRunStats stats)
         {
             var sw = Stopwatch.StartNew();
             var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
             var isMove = move ?? false;
-
-            using var device = GetDeviceByName(deviceName);
 
             // Subfolder filter
             Regex? filterSubfolderRegex = null;
@@ -260,7 +262,7 @@ namespace MediaDeviceCopier
                     var subTargetFullPath = Path.Combine(targetFolder, subFolderName);
                     try
                     {
-                        CopyFiles(mode, deviceName, subFolderFullPath, subTargetFullPath, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+                        CopyFiles(mode, device, subFolderFullPath, subTargetFullPath, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
                     }
                     catch (COMException ex)
                     {

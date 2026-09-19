@@ -18,6 +18,8 @@ internal sealed class FakeTreeDevice : IMediaDevice
 	public bool IsConnected { get; private set; }
 	public string FriendlyName { get; init; } = "MockDevice";
 	public List<string> DeletedFiles { get; } = new();
+	public int DisposeCount { get; private set; }
+	public bool IsDisposed { get; private set; }
 
 	public void Connect() => IsConnected = true;
 
@@ -31,6 +33,9 @@ internal sealed class FakeTreeDevice : IMediaDevice
 
 	private void ThrowIfFailing(string key)
 	{
+		if (IsDisposed)
+			throw new ObjectDisposedException(nameof(FakeTreeDevice));
+
 		_calls[key] = _calls.GetValueOrDefault(key) + 1;
 		if (_failures.TryGetValue(key, out var failure) && failure.Times > 0)
 		{
@@ -74,7 +79,11 @@ internal sealed class FakeTreeDevice : IMediaDevice
 	public MediaFileInfo GetFileInfo(string path) => throw new NotImplementedException();
 	public void UploadFile(string sourceFilePath, string targetFilePath) => throw new NotImplementedException();
 	public void CreateDirectory(string folder) => throw new NotImplementedException();
-	public void Dispose() { }
+	public void Dispose()
+	{
+		DisposeCount++;
+		IsDisposed = true;
+	}
 }
 
 [Collection(nameof(MtpDeviceStaticStateCollection))]
@@ -312,6 +321,31 @@ public sealed class EnumerationAndFailureHandlingTests : IDisposable
 		Assert.Contains("could not process folder /device", output);
 		Assert.Contains("Completed with errors: 0 file(s) and 1 folder(s)", output);
 		Assert.Contains("/device", output);
+	}
+
+	[Fact]
+	public async Task DownloadRecursive_SharesOneDeviceForWholeRun_DisposedExactlyOnce()
+	{
+		// The device must be opened once at the run level and disposed once at the end.
+		// A per-recursive-call dispose would tear down the cached device and make every
+		// sibling after the first fail (ObjectDisposedException from the fake).
+		var fake = new FakeTreeDevice();
+		fake.AddFolder("/device");
+		fake.AddFolder("/device/A");
+		fake.AddFolder("/device/B");
+		fake.AddFolder("/device/C");
+		fake.AddFile("/device/A/a.jpg", new byte[] { 1 });
+		fake.AddFile("/device/B/b.jpg", new byte[] { 2 });
+		fake.AddFile("/device/C/c.jpg", new byte[] { 3 });
+
+		using var target = new TempDirectory();
+		var (exitCode, _) = await RunProgramAsync(fake, "download-files", "-n", "MockDevice", "-s", "/device", "-t", target.Path, "-r");
+
+		Assert.Equal(0, exitCode);
+		Assert.True(File.Exists(Path.Combine(target.Path, "A", "a.jpg")));
+		Assert.True(File.Exists(Path.Combine(target.Path, "B", "b.jpg")));
+		Assert.True(File.Exists(Path.Combine(target.Path, "C", "c.jpg")));
+		Assert.Equal(1, fake.DisposeCount);
 	}
 
 	[Fact]
