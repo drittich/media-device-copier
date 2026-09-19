@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace MediaDeviceCopier
@@ -159,7 +160,7 @@ namespace MediaDeviceCopier
                 var move = parseResult.GetValue(moveOption);
                 var filterSubfolderPattern = parseResult.GetValue(filterSubfoldersOption);
                 var filterFilePattern = parseResult.GetValue(filterFilesOption);
-                CopyFiles("upload", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
+                return RunCopy("upload", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
             });
 
             downloadCommand.SetAction(parseResult =>
@@ -172,13 +173,41 @@ namespace MediaDeviceCopier
                 var move = parseResult.GetValue(moveOption);
                 var filterSubfolderPattern = parseResult.GetValue(filterSubfoldersOption);
                 var filterFilePattern = parseResult.GetValue(filterFilesOption);
-                CopyFiles("download", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
+                return RunCopy("download", deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
             });
 
             return rootCommand;
         }
 
-        private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move)
+        /// <summary>
+        /// Tracks files and folders that could not be copied during a run, so they can be reported at the end
+        /// and reflected in the exit code.
+        /// </summary>
+        private sealed class CopyRunStats
+        {
+            public List<string> FailedFiles { get; } = new();
+            public List<string> FailedFolders { get; } = new();
+            public bool HasFailures => FailedFiles.Count > 0 || FailedFolders.Count > 0;
+        }
+
+        private static int RunCopy(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move)
+        {
+            var stats = new CopyRunStats();
+            CopyFiles(mode, deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+
+            if (!stats.HasFailures)
+                return 0;
+
+            Console.WriteLine();
+            Console.WriteLine($"Completed with errors: {stats.FailedFiles.Count} file(s) and {stats.FailedFolders.Count} folder(s) could not be copied.");
+            foreach (var failedFolder in stats.FailedFolders)
+                Console.WriteLine($"   Folder: {failedFolder}");
+            foreach (var failedFile in stats.FailedFiles)
+                Console.WriteLine($"   File: {failedFile}");
+            return 1;
+        }
+
+        private static void CopyFiles(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move, CopyRunStats stats)
         {
             var sw = Stopwatch.StartNew();
             var fileCopyMode = mode == "download" ? FileCopyMode.Download : FileCopyMode.Upload;
@@ -220,7 +249,16 @@ namespace MediaDeviceCopier
                     }
 
                     var subTargetFullPath = Path.Combine(targetFolder, subFolderName);
-                    CopyFiles(mode, deviceName, subFolderFullPath, subTargetFullPath, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move);
+                    try
+                    {
+                        CopyFiles(mode, deviceName, subFolderFullPath, subTargetFullPath, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+                    }
+                    catch (COMException ex)
+                    {
+                        // A device error in one folder (after retries) must not abandon the rest of the run
+                        Console.WriteLine($"ERROR: could not process folder {subFolderFullPath}: {ex.Message} (0x{ex.HResult:X8}). Continuing with the next folder.");
+                        stats.FailedFolders.Add(subFolderFullPath);
+                    }
                 }
             }
 
@@ -241,6 +279,7 @@ namespace MediaDeviceCopier
 
             Console.WriteLine($"Copying {files.Length:N0} files...");
             ulong bytesCopied = 0, bytesNotCopied = 0;
+            var filesFailed = 0;
 
             foreach (var sourceFilePath in files.OrderBy(f => f))
             {
@@ -248,7 +287,12 @@ namespace MediaDeviceCopier
                 Console.Write($"{sourceFilePath}...");
 
                 var resultInfo = device.CopyFile(fileCopyMode, sourceFilePath, targetFilePath, skipExisting ?? true, isMove);
-                if (resultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists ||
+                if (resultInfo.CopyStatus == FileCopyStatus.Failed)
+                {
+                    filesFailed++;
+                    stats.FailedFiles.Add(sourceFilePath);
+                }
+                else if (resultInfo.CopyStatus == FileCopyStatus.SkippedBecauseAlreadyExists ||
                     resultInfo.CopyStatus == FileCopyStatus.SkippedBecauseUnsupported)
                     bytesNotCopied += resultInfo.Length;
                 else
@@ -257,7 +301,8 @@ namespace MediaDeviceCopier
                 WriteCopyResult(resultInfo);
             }
 
-            Console.WriteLine($"Done, copied {BytesToString(bytesCopied)}, skipped {BytesToString(bytesNotCopied)}");
+            var failedSuffix = filesFailed > 0 ? $", failed {filesFailed:N0}" : string.Empty;
+            Console.WriteLine($"Done, copied {BytesToString(bytesCopied)}, skipped {BytesToString(bytesNotCopied)}{failedSuffix}");
             Console.WriteLine($"Elapsed time: {sw.Elapsed:hh\\:mm\\:ss\\.ff}");
         }
 
@@ -312,6 +357,9 @@ namespace MediaDeviceCopier
                     break;
                 case FileCopyStatus.SkippedBecauseUnsupported:
                     Console.WriteLine("skipped (unsupported file type)");
+                    break;
+                case FileCopyStatus.Failed:
+                    Console.WriteLine($"FAILED ({fileCopyResultInfo.FailureReason ?? "unknown error"})");
                     break;
             }
         }

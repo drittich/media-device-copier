@@ -12,7 +12,8 @@
   
 - All strategies execute for all file types (no extension-based gating)
 - COM Exception 0x80004005 triggers fallback, other exceptions rethrow
-- Failures result in `FileCopyStatus.SkippedBecauseUnsupported`
+- `UnauthorizedAccessException` (typically an unwritable local target) stops the pipeline early since other strategies would fail the same way
+- Failures result in `FileCopyStatus.Failed` with a `FailureReason`; the run exits with a non-zero code
 
 ### Test Coverage Gaps
 - No tests for resilient download strategy execution

@@ -1,5 +1,6 @@
 ﻿using MediaDevices;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace MediaDeviceCopier
 {
@@ -136,7 +137,7 @@ namespace MediaDeviceCopier
 				throw new NotImplementedException();
 			}
 
-			if (isMove && result.CopyStatus != FileCopyStatus.SkippedBecauseAlreadyExists && result.CopyStatus != FileCopyStatus.SkippedBecauseUnsupported)
+			if (isMove && result.CopyStatus != FileCopyStatus.SkippedBecauseAlreadyExists && result.CopyStatus != FileCopyStatus.SkippedBecauseUnsupported && result.CopyStatus != FileCopyStatus.Failed)
 			{
 				try
 				{
@@ -170,6 +171,18 @@ namespace MediaDeviceCopier
 			FileComparisonInfo? mtpFileComparisonInfo = null;
 			FileCopyResultInfo fileCopyInfo;
 
+			// Some devices report objects with an empty name. There is no file name to download to
+			// (the target path would resolve to the destination folder itself), so fail explicitly.
+			if (string.IsNullOrEmpty(Path.GetFileName(sourceFilePath)))
+			{
+				return new()
+				{
+					CopyStatus = FileCopyStatus.Failed,
+					Length = 0,
+					FailureReason = "device object has no name"
+				};
+			}
+
 			if (skipExisting && File.Exists(targetFilePath))
 			{
 				var sizeAndDatesMatch = GetSizeAndDatesMatch(FileCopyMode.Download, sourceFilePath, targetFilePath, out mtpFileComparisonInfo);
@@ -189,24 +202,14 @@ namespace MediaDeviceCopier
 			}
 
 			// Resilient download with multiple fallback strategies for problematic files
-			try
+			if (!TryResilientDownload(sourceFilePath, targetFilePath, out var failureReason))
 			{
-				bool downloadSuccessful = TryResilientDownload(sourceFilePath, targetFilePath);
-
-				if (!downloadSuccessful)
+				return new()
 				{
-					throw new InvalidOperationException($"Failed to download file after trying all available methods: {sourceFilePath}");
-				}
-			}
-			catch (Exception ex) 
-			{
-				Console.WriteLine($"WARNING: File copy failed with error: {ex.Message}. File will be skipped: {sourceFilePath}");
-				fileCopyInfo = new()
-				{
-					CopyStatus = FileCopyStatus.SkippedBecauseUnsupported,
-					Length = 0
+					CopyStatus = FileCopyStatus.Failed,
+					Length = 0,
+					FailureReason = failureReason
 				};
-				return fileCopyInfo;
 			}
 
 			// set the file date to match the source file (with safe fallback)
@@ -357,7 +360,7 @@ namespace MediaDeviceCopier
 				throw new DirectoryNotFoundException($"Folder not found: {folder}");
 			}
 
-			return _device.GetFiles(folder);
+			return EnumerateChildren(() => _device.GetFiles(folder), folder);
 		}
 
 		public static FileComparisonInfo GetComparisonInfo(MediaFileInfo mediaFileInfo)
@@ -478,8 +481,9 @@ namespace MediaDeviceCopier
 		/// </summary>
 		/// <param name="sourceFilePath">Source file path on the MTP device</param>
 		/// <param name="targetFilePath">Target file path on local system</param>
+		/// <param name="failureReason">Message describing the last failure when the download did not succeed; otherwise null</param>
 		/// <returns>True if download succeeded, false if all strategies failed</returns>
-		private bool TryResilientDownload(string sourceFilePath, string targetFilePath)
+		private bool TryResilientDownload(string sourceFilePath, string targetFilePath, out string? failureReason)
 		{
 			var extension = Path.GetExtension(sourceFilePath);
 			var mediaClass = ClassifyFile(extension);
@@ -494,6 +498,8 @@ namespace MediaDeviceCopier
 
 			var strategies = GetDefaultDownloadStrategies();
 
+			failureReason = "all download strategies returned false";
+
 			foreach (var (name, strategy) in strategies)
 			{
 				var stopwatch = Stopwatch.StartNew();
@@ -506,6 +512,7 @@ namespace MediaDeviceCopier
 					if (success)
 					{
 						Console.Write($"Success ({stopwatch.ElapsedMilliseconds}ms) ");
+						failureReason = null;
 						return true;
 					}
 					else
@@ -517,12 +524,23 @@ namespace MediaDeviceCopier
 				{
 					stopwatch.Stop();
 					Console.Write($"COM-Error:0x{comEx.HResult:X8} ({stopwatch.ElapsedMilliseconds}ms) ");
+					failureReason = $"{comEx.Message} (0x{comEx.HResult:X8})";
 					// Continue to next strategy
+				}
+				catch (UnauthorizedAccessException ex)
+				{
+					stopwatch.Stop();
+					Console.Write($"Failed:{ex.GetType().Name} ({stopwatch.ElapsedMilliseconds}ms) ");
+					failureReason = ex.Message;
+					// Not a transient device error (typically the local target cannot be written to),
+					// so the remaining strategies would fail the same way
+					return false;
 				}
 				catch (Exception ex)
 				{
 					stopwatch.Stop();
 					Console.Write($"Failed:{ex.GetType().Name} ({stopwatch.ElapsedMilliseconds}ms) ");
+					failureReason = ex.Message;
 					// Continue to next strategy
 				}
 			}
@@ -605,7 +623,51 @@ namespace MediaDeviceCopier
 				throw new DirectoryNotFoundException($"Folder not found: {folder}");
 			}
 
-			return _device.GetDirectories(folder);
+			return EnumerateChildren(() => _device.GetDirectories(folder), folder);
+		}
+
+		// HRESULT returned by the MTP stack ("Element not found") when enumerating a folder that has no children
+		private const int HResultElementNotFound = unchecked((int)0x80070490);
+
+		// HRESULTs seen intermittently from devices (notably iPhones) that succeed when the same call is retried
+		private static readonly HashSet<int> TransientEnumerationHResults = new()
+		{
+			unchecked((int)0x8007000D) // ERROR_INVALID_DATA: "The data is invalid"
+		};
+
+		/// <summary>
+		/// Maximum number of attempts when enumerating a folder hits a transient device error.
+		/// </summary>
+		public static int EnumerationMaxAttempts { get; set; } = 4;
+
+		/// <summary>
+		/// Base delay between enumeration attempts; the delay is multiplied by the attempt number.
+		/// </summary>
+		public static TimeSpan EnumerationRetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
+
+		/// <summary>
+		/// Enumerates the children of a device folder. An empty folder is reported by some devices as an
+		/// "Element not found" error, which is treated as no children. Transient errors are retried
+		/// with a growing delay; anything else (or a transient error that persists) is rethrown.
+		/// </summary>
+		private static string[] EnumerateChildren(Func<string[]> enumerate, string folder)
+		{
+			for (var attempt = 1; ; attempt++)
+			{
+				try
+				{
+					return enumerate();
+				}
+				catch (COMException ex) when (ex.HResult == HResultElementNotFound)
+				{
+					return Array.Empty<string>();
+				}
+				catch (COMException ex) when (TransientEnumerationHResults.Contains(ex.HResult) && attempt < EnumerationMaxAttempts)
+				{
+					Console.WriteLine($"Transient device error 0x{ex.HResult:X8} reading {folder}; retrying ({attempt}/{EnumerationMaxAttempts - 1})...");
+					Thread.Sleep(EnumerationRetryDelay * attempt);
+				}
+			}
 		}
 
 		public void CreateDirectory(string folder)

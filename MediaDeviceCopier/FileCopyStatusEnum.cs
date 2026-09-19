@@ -5,6 +5,7 @@
 		Copied,
 		CopiedBecauseDateOrSizeMismatch,
 		SkippedBecauseAlreadyExists,
-		SkippedBecauseUnsupported
+		SkippedBecauseUnsupported,
+		Failed
 	}
 }
