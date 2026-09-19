@@ -33,7 +33,7 @@ jobs:
           }
           $csprojVersion = $match.Groups[1].Value.Trim()
           $tagName = $env:TAG_NAME
-          $tagVersion = $tagName.TrimStart('v')
+          $tagVersion = $tagName.Substring(1)
           Write-Host "csproj version: $csprojVersion"
           Write-Host "tag version:    $tagVersion"
           if ($csprojVersion -ne $tagVersion) {
