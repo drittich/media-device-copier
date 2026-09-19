@@ -1,5 +1,12 @@
 # Media Device Copier
 
+[![CI](https://github.com/drittich/media-device-copier/actions/workflows/ci.yml/badge.svg)](https://github.com/drittich/media-device-copier/actions/workflows/ci.yml)
+[![Lint](https://github.com/drittich/media-device-copier/actions/workflows/lint.yml/badge.svg)](https://github.com/drittich/media-device-copier/actions/workflows/lint.yml)
+[![Latest release](https://img.shields.io/github/v/release/drittich/media-device-copier)](https://github.com/drittich/media-device-copier/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)
+![Platform](https://img.shields.io/badge/platform-Windows-blue)
+
 **Media Device Copier** is a Windows command-line utility for copying files to and from phones and other devices connected via MTP (Media Transfer Protocol).
 
 Use it to:
