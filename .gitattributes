@@ -1,0 +1,23 @@
+# Normalize line endings automatically for text files
+* text=auto
+
+# Explicit types for project files
+*.cs      text diff=csharp
+*.csproj  text
+*.sln     text
+*.config  text
+*.json    text
+*.md      text
+*.yml     text
+*.yaml    text
+*.txt     text
+
+# Binary files (never normalize)
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.dll     binary
+*.exe     binary
+*.snk     binary
