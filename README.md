@@ -33,6 +33,8 @@ Use it to:
     - [Folder not found](#folder-not-found)
     - [Invalid regex](#invalid-regex)
     - [Unsupported file types](#unsupported-file-types)
+    - [Failed files and exit code](#failed-files-and-exit-code)
+    - [Empty folders and transient device errors](#empty-folders-and-transient-device-errors)
   - [Architecture (resilient downloads)](#architecture-resilient-downloads)
   - [License](#license)
   - [Contributing](#contributing)
@@ -279,6 +281,15 @@ If a filter regex is invalid, the CLI will reject it. Start simple and escape ba
 ### Unsupported file types
 
 Some device files may not be transferable via MTP; those are reported as skipped.
+
+### Failed files and exit code
+
+If a file cannot be downloaded (for example, the device reports an object with no name, or every download strategy fails), it is reported as `FAILED (<reason>)`, the run continues with the remaining files, and a summary of failed files and folders is printed at the end. The exit code is `0` when everything succeeded and `1` if any file or folder failed, so scripts can detect an incomplete transfer.
+
+### Empty folders and transient device errors
+
+- Empty device folders are treated as having no files; they are not an error.
+- Some devices (notably iPhones) intermittently fail folder enumeration with errors such as `0x8007000D` ("The data is invalid"). These are retried a few times with a short delay. If a folder still cannot be read during a recursive copy, it is reported, the copy continues with the next folder, and the run exits with code `1`.
 
 ---
 

@@ -105,7 +105,7 @@ namespace MediaDeviceCopier.Tests.Mocked
 		}
 
 		[Fact]
-		public void Download_AllStrategiesFail_ReturnsSkippedBecauseUnsupported()
+		public void Download_AllStrategiesFail_ReturnsFailed()
 		{
 			// Arrange: Mock that always fails (more failures than available strategies)
 			var mock = new StrategyTestMock(failureCount: 10);
@@ -123,7 +123,8 @@ namespace MediaDeviceCopier.Tests.Mocked
 			var result = device.CopyFile(FileCopyMode.Download, "/device/problem.file", targetPath, skipExisting: false, isMove: false);
 
 			// Assert
-			Assert.Equal(FileCopyStatus.SkippedBecauseUnsupported, result.CopyStatus);
+			Assert.Equal(FileCopyStatus.Failed, result.CopyStatus);
+			Assert.Contains("Test COM error", result.FailureReason);
 			Assert.False(File.Exists(targetPath)); // File should not exist
 			Assert.Equal(4, mock.DownloadAttempts.Count); // All 4 strategies attempted
 		}
@@ -317,8 +318,8 @@ namespace MediaDeviceCopier.Tests.Mocked
 			var result = device.CopyFile(FileCopyMode.Download, sourceFile, targetPath, skipExisting: false, isMove: true);
 
 			// Assert - When download fails, SourceDeleted should be false
-			// The current behavior marks it as SkippedBecauseUnsupported and doesn't set SourceDeleted to true
-			Assert.Equal(FileCopyStatus.SkippedBecauseUnsupported, result.CopyStatus);
+			// A failed download is reported as Failed and must never set SourceDeleted
+			Assert.Equal(FileCopyStatus.Failed, result.CopyStatus);
 			Assert.False(result.SourceDeleted);
 			// File should still exist since copy failed (deletion only happens on successful copy in move mode)
 			// However, the mock's behavior when file is still tracked is to return true from FileExists
