@@ -385,7 +385,7 @@ public sealed class EnumerationAndFailureHandlingTests : IDisposable
 	[Fact]
 	public void Download_UnauthorizedAccess_IsNotRetriedAcrossStrategies()
 	{
-		var mock = new StrategyTestMock(failureCount: 10, new UnauthorizedAccessException("Access to the path is denied."));
+		var mock = new StrategyTestMock(failureCount: 10, exceptionToThrow: new UnauthorizedAccessException("Access to the path is denied."));
 		mock.Connect();
 		mock.AddFolder("/device");
 		mock.AddFile("/device/file.jpg", new byte[] { 1 });
