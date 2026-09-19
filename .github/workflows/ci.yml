@@ -22,10 +22,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore MediaDeviceCopier.Tests.Mocked/MediaDeviceCopier.Tests.Mocked.csproj
 
       - name: Build
-        run: dotnet build -c Release --no-restore
+        run: dotnet build MediaDeviceCopier.Tests.Mocked/MediaDeviceCopier.Tests.Mocked.csproj -c Release --no-restore
 
       - name: Test (Mocked)
         run: dotnet test MediaDeviceCopier.Tests.Mocked/MediaDeviceCopier.Tests.Mocked.csproj -c Release --no-build

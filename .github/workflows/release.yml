@@ -21,6 +21,8 @@ jobs:
 
       - name: Verify version matches tag
         shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           $csproj = 'MediaDeviceCopier/MediaDeviceCopier.csproj'
           $content = Get-Content $csproj -Raw
@@ -30,11 +32,12 @@ jobs:
             exit 1
           }
           $csprojVersion = $match.Groups[1].Value.Trim()
-          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
+          $tagName = $env:TAG_NAME
+          $tagVersion = $tagName.TrimStart('v')
           Write-Host "csproj version: $csprojVersion"
           Write-Host "tag version:    $tagVersion"
           if ($csprojVersion -ne $tagVersion) {
-            Write-Error "Version mismatch: csproj <Version> is '$csprojVersion' but the pushed tag is '$tagVersion' (from '${{ github.ref_name }}'). Update the csproj <Version> to match the tag, or retag."
+            Write-Error "Version mismatch: csproj <Version> is '$csprojVersion' but the pushed tag is '$tagVersion' (from '$tagName'). Update the csproj <Version> to match the tag, or retag."
             exit 1
           }
           Write-Host "Version check passed: $csprojVersion matches tag $tagVersion"
