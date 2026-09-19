@@ -296,6 +296,40 @@ public sealed class EnumerationAndFailureHandlingTests : IDisposable
 		Assert.Contains("/device/B", output);
 	}
 
+	[Fact]
+	public async Task DownloadRecursive_RootFolderFailsPersistently_ReportsFailureAndExitsNonZero()
+	{
+		// A persistent device error on the root folder itself must still produce a summary and exit 1,
+		// not escape as an unhandled exception.
+		var fake = new FakeTreeDevice();
+		fake.AddFolder("/device");
+		fake.FailGetDirectories("/device", Com(InvalidData));
+
+		using var target = new TempDirectory();
+		var (exitCode, output) = await RunProgramAsync(fake, "download-files", "-n", "MockDevice", "-s", "/device", "-t", target.Path, "-r");
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("could not process folder /device", output);
+		Assert.Contains("Completed with errors: 0 file(s) and 1 folder(s)", output);
+		Assert.Contains("/device", output);
+	}
+
+	[Fact]
+	public async Task DownloadNonRecursive_RootFolderFileEnumerationFailsPersistently_ReportsFailureAndExitsNonZero()
+	{
+		// The root GetFiles call (non-recursive) failing persistently must also be caught.
+		var fake = new FakeTreeDevice();
+		fake.AddFolder("/device");
+		fake.FailGetFiles("/device", Com(InvalidData));
+
+		using var target = new TempDirectory();
+		var (exitCode, output) = await RunProgramAsync(fake, "download-files", "-n", "MockDevice", "-s", "/device", "-t", target.Path);
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("could not process folder /device", output);
+		Assert.Contains("Completed with errors: 0 file(s) and 1 folder(s)", output);
+	}
+
 	#endregion
 
 	#region Failed downloads

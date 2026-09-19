@@ -193,7 +193,16 @@ namespace MediaDeviceCopier
         private static int RunCopy(string mode, string deviceName, string sourceFolder, string targetFolder, bool? skipExisting, bool? recursive, string? filterSubfolderPattern, string? filterFilePattern, bool? move)
         {
             var stats = new CopyRunStats();
-            CopyFiles(mode, deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+            try
+            {
+                CopyFiles(mode, deviceName, sourceFolder, targetFolder, skipExisting, recursive, filterSubfolderPattern, filterFilePattern, move, stats);
+            }
+            catch (COMException ex)
+            {
+                // A device error on the root folder itself (after retries) must still produce a summary and a non-zero exit code
+                Console.WriteLine($"ERROR: could not process folder {sourceFolder}: {ex.Message} (0x{ex.HResult:X8}).");
+                stats.FailedFolders.Add(sourceFolder);
+            }
 
             if (!stats.HasFailures)
                 return 0;
