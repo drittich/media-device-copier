@@ -5,9 +5,13 @@
 		<TargetFramework>net10.0-windows</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<!-- Single source of truth for the app version. Bump ONLY this on a release. -->
+		<!-- AssemblyVersion, FileVersion and AssemblyInformationalVersion all default -->
+		<!-- from <Version>, and Program.cs derives its version string from the assembly -->
+		<!-- at runtime, so there is no literal to keep in sync. -->
 		<Version>0.8.0</Version>
-		<FileVersion>0.8.0.0</FileVersion>
-		<AssemblyVersion>0.8.0.0</AssemblyVersion>
+		<!-- Keep the informational version clean (no +<git-sha> suffix) so the version command prints 0.8.0. -->
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

@@ -36,6 +36,9 @@ Use it to:
     - [Failed files and exit code](#failed-files-and-exit-code)
     - [Empty folders and transient device errors](#empty-folders-and-transient-device-errors)
   - [Architecture (resilient downloads)](#architecture-resilient-downloads)
+  - [Building from source](#building-from-source)
+  - [Continuous integration](#continuous-integration)
+  - [Releasing](#releasing)
   - [License](#license)
   - [Contributing](#contributing)
 
@@ -298,6 +301,78 @@ If a file cannot be downloaded (for example, the device reports an object with n
 MTP transfers can fail for certain files due to device firmware quirks, timing issues, or protocol limitations. MediaDeviceCopier uses a **multi-strategy download pipeline** and detailed diagnostics to make downloads more resilient.
 
 Implementation details are documented in [ARCHITECTURE_MTP_STRATEGIES.md](ARCHITECTURE_MTP_STRATEGIES.md).
+
+---
+
+## Building from source
+
+Requires the .NET 10 SDK on Windows (the app targets `net10.0-windows`).
+
+```powershell
+# Build
+dotnet build -c Release
+
+# Run the mocked test suite
+dotnet test MediaDeviceCopier.Tests.Mocked/MediaDeviceCopier.Tests.Mocked.csproj
+
+# Produce the single-file executable (framework-dependent, win-x64)
+dotnet publish MediaDeviceCopier/MediaDeviceCopier.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish
+# -> publish/MediaDeviceCopier.exe
+```
+
+> **Note:** `MediaDeviceCopier.Tests.RealDevice` is a separate suite that requires a
+> physical MTP device connected to the machine, so it is not run by `dotnet test` above
+> or in CI. Run it manually when validating against real hardware.
+
+The application version comes from a single source: the `<Version>` element in
+[MediaDeviceCopier/MediaDeviceCopier.csproj](MediaDeviceCopier/MediaDeviceCopier.csproj).
+`AssemblyVersion`, `FileVersion`, and the version shown by `--version` / `--help` are all
+derived from it, so a release only requires changing that one value.
+
+---
+
+## Continuous integration
+
+Two GitHub Actions workflows run automatically on every pull request and on pushes to `main`:
+
+- **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) — restores, builds in Release,
+  and runs the mocked test suite on `windows-latest`.
+- **Lint** ([.github/workflows/lint.yml](.github/workflows/lint.yml)) — fails if any file is
+  committed with CRLF line endings (line endings are normalized to LF via
+  [.gitattributes](.gitattributes)). If this fails, run `git add --renormalize .` and commit.
+
+[Dependabot](.github/dependabot.yml) opens weekly PRs for NuGet and GitHub Actions updates.
+
+---
+
+## Releasing
+
+Releases are produced by the **Release** workflow
+([.github/workflows/release.yml](.github/workflows/release.yml)), which triggers on any pushed
+tag matching `v*`. To cut a release:
+
+1. **Bump the version.** Edit `<Version>` in
+   [MediaDeviceCopier/MediaDeviceCopier.csproj](MediaDeviceCopier/MediaDeviceCopier.csproj)
+   (this is the only place to change it), commit, and merge to `main`.
+2. **Tag and push.** The tag version must match `<Version>` exactly (with a `v` prefix) —
+   the workflow verifies this and fails the build on a mismatch:
+
+   ```powershell
+   git checkout main
+   git pull
+   git tag v0.8.0
+   git push origin v0.8.0
+   ```
+
+3. **The workflow then** publishes `MediaDeviceCopier.exe`, generates release notes
+   (categorized via [.github/release.yml](.github/release.yml)), and creates a **draft**
+   GitHub Release with the exe attached.
+4. **Review and publish.** Open the draft release on GitHub, review the auto-generated notes
+   (add any behavior-change callouts), confirm "Set as the latest release", and click
+   **Publish release**.
+
+> **Tip:** When a PR closes multiple issues, give each one its own closing keyword —
+> `Closes #20, closes #21, closes #22`. Writing `Closes #20, #21, #22` only closes the first.
 
 ---
 

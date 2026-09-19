@@ -1,0 +1,31 @@
+# CI workflow for MediaDeviceCopier.
+# Note: MediaDeviceCopier.Tests.RealDevice is intentionally excluded because
+# it requires physical MTP hardware and cannot run on a hosted CI runner.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test (Mocked)
+        run: dotnet test MediaDeviceCopier.Tests.Mocked/MediaDeviceCopier.Tests.Mocked.csproj -c Release --no-build

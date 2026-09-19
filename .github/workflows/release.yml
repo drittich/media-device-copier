@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Verify version matches tag
+        shell: pwsh
+        run: |
+          $csproj = 'MediaDeviceCopier/MediaDeviceCopier.csproj'
+          $content = Get-Content $csproj -Raw
+          $match = [regex]::Match($content, '<Version>(.*?)</Version>')
+          if (-not $match.Success) {
+            Write-Error "Could not find a <Version> element in $csproj"
+            exit 1
+          }
+          $csprojVersion = $match.Groups[1].Value.Trim()
+          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
+          Write-Host "csproj version: $csprojVersion"
+          Write-Host "tag version:    $tagVersion"
+          if ($csprojVersion -ne $tagVersion) {
+            Write-Error "Version mismatch: csproj <Version> is '$csprojVersion' but the pushed tag is '$tagVersion' (from '${{ github.ref_name }}'). Update the csproj <Version> to match the tag, or retag."
+            exit 1
+          }
+          Write-Host "Version check passed: $csprojVersion matches tag $tagVersion"
+
+      - name: Publish
+        run: dotnet publish MediaDeviceCopier/MediaDeviceCopier.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: publish/MediaDeviceCopier.exe
+          generate_release_notes: true
+          draft: true

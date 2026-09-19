@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
@@ -7,7 +8,31 @@ namespace MediaDeviceCopier
 {
     public class Program
     {
-        internal const string Version = "0.8.0";
+        // Derived at runtime from the assembly so the version has a single source of
+        // truth: the <Version> property in MediaDeviceCopier.csproj. Do not hardcode a
+        // version literal here. Prefers the informational version (matches <Version>,
+        // e.g. "0.8.0"), stripping any build-metadata suffix after '+', and falls back
+        // to Major.Minor.Build from the assembly version.
+        internal static readonly string Version = ResolveVersion();
+
+        private static string ResolveVersion()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+
+            var informational = assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(informational))
+            {
+                var plus = informational.IndexOf('+');
+                return plus >= 0 ? informational[..plus] : informational;
+            }
+
+            var version = assembly.GetName().Version;
+            return version is not null
+                ? $"{version.Major}.{version.Minor}.{version.Build}"
+                : "unknown";
+        }
 
         public static async Task<int> Main(string[] args)
         {
