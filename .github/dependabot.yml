@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep NuGet dependencies for the .NET project up to date
+  # (e.g. MediaDevices, System.CommandLine)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Keep GitHub Actions workflows (under .github/workflows) up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

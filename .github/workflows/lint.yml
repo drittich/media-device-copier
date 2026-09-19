@@ -1,0 +1,25 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  line-endings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check line endings are normalized
+        run: |
+          # Check the INDEX (committed) EOL, not the working tree, so the result
+          # is independent of the runner's core.autocrlf. Binary files are marked
+          # i/-none or binary and never i/crlf, so they are excluded automatically.
+          bad=$(git ls-files --eol | grep -E 'i/crlf' || true)
+          if [ -n "$bad" ]; then
+            echo "The following files are committed with CRLF but should be LF:"
+            echo "$bad"
+            echo "Run 'git add --renormalize .' and commit to fix."
+            exit 1
+          fi
